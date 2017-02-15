@@ -73,6 +73,8 @@ my %hits; # $hits{contig}{1} = contig; $hits{contig}{2} = anothercontig
 my %RBHs; # $RBHs{largercontig} = smallercontig
 my %purged; # $purged{contig} = 1
 
+my $MDPbin = "$Bin/../dotplot_maker/bin/";
+
 # open files
 open($FAI, $fai) or die "failed to open $fai for reading\n";
 if ($blast =~ /\.gz$/){
@@ -167,24 +169,24 @@ sub guess_assignment{
     `$Bin/returnseq.pl -f $fasta -i $query > $temp/tmp_query.fasta`;
     
     # nucmer
-    print STDERR "MDP_nucmer --maxmatch -p $temp/tmp $temp/tmp_query.fasta $ref\n";
-    `MDP_nucmer --maxmatch -p $temp/tmp $temp/tmp_query.fasta $ref`;
+    print STDERR "$MDPbin/MDP_nucmer --maxmatch -p $temp/tmp $temp/tmp_query.fasta $ref\n";
+    `$MDPbin/MDP_nucmer --maxmatch -p $temp/tmp $temp/tmp_query.fasta $ref`;
     
     # deltas
-    print STDERR "MDP_delta-filter -m $temp/tmp.delta > $temp/tmp.m.delta\n";
-    `MDP_delta-filter -m $temp/tmp.delta > $temp/tmp.m.delta`;
-    print STDERR "MDP_delta-filter -1 $temp/tmp.delta > $temp/tmp.1.delta\n";
-    `MDP_delta-filter -1 $temp/tmp.delta > $temp/tmp.1.delta`;
+    print STDERR "$MDPbin/MDP_delta-filter -m $temp/tmp.delta > $temp/tmp.m.delta\n";
+    `$MDPbin/MDP_delta-filter -m $temp/tmp.delta > $temp/tmp.m.delta`;
+    print STDERR "$MDPbin/MDP_delta-filter -1 $temp/tmp.delta > $temp/tmp.1.delta\n";
+    `$MDPbin/MDP_delta-filter -1 $temp/tmp.delta > $temp/tmp.1.delta`;
     
     # all-match coverage
-    print STDERR "MDP_show-coords -b -c $temp/tmp.m.delta | grep -P \"\\s+\\d\" | awk '{ s+=\$10 } END { print s }'\n";
-    my $maxmatch = `MDP_show-coords -b -c $temp/tmp.m.delta | grep -P \"\\s+\\d\" | awk '{ s+=\$10 } END { print s }'`;
+    print STDERR "$MDPbin/MDP_show-coords -b -c $temp/tmp.m.delta | grep -P \"\\s+\\d\" | awk '{ s+=\$10 } END { print s }'\n";
+    my $maxmatch = `$MDPbin/MDP_show-coords -b -c $temp/tmp.m.delta | grep -P \"\\s+\\d\" | awk '{ s+=\$10 } END { print s }'`;
     $maxmatch =~ s/\s//g;
     print STDERR "MAXMATCH coverage = $maxmatch\n";
     
     # best-align coverage
-    print STDERR "MDP_show-coords -b -c $temp/tmp.1.delta | grep -P \"\\s+\\d\" | awk '{ s+=\$10 } END { print s }'\n";
-    my $alignmatch = `MDP_show-coords -b -c $temp/tmp.1.delta | grep -P \"\\s+\\d\" | awk '{ s+=\$10 } END { print s }'`;
+    print STDERR "$MDPbin/MDP_show-coords -b -c $temp/tmp.1.delta | grep -P \"\\s+\\d\" | awk '{ s+=\$10 } END { print s }'\n";
+    my $alignmatch = `$MDPbin/MDP_show-coords -b -c $temp/tmp.1.delta | grep -P \"\\s+\\d\" | awk '{ s+=\$10 } END { print s }'`;
     $alignmatch =~ s/\s//g;
     print STDERR "BESTMATCH coverage = $alignmatch\n";
     
@@ -194,8 +196,9 @@ sub guess_assignment{
     if ( ($maxmatch >= $max_match_cutoff) && ($alignmatch >= $align_match_cutoff) ) {
         $purged{$query}=1;
         $a .= "r";
-        print STDERR "$query = repeat/assembly junk\n";
-        `MDP_mummerplot --fat -p $dotcall/$query $temp/tmp.m.delta`;
+        print STDERR "\n### $query = repeat/assembly junk\n\n";
+        print STDERR "$MDPbin/MDP_mummerplot --fat -p $dotcall/$query $temp/tmp.m.delta\n";
+        `$MDPbin/MDP_mummerplot --fat -p $dotcall/$query $temp/tmp.m.delta`;
         unlink "$dotcall/$query.filter";
         unlink "$dotcall/$query.fplot";
         unlink "$dotcall/$query.rplot";
@@ -204,8 +207,9 @@ sub guess_assignment{
     } elsif ($alignmatch >= $align_match_cutoff){
         $purged{$query}=1;
         $a .= "h";
-        print STDERR "$query = haplotig\n";
-        `MDP_mummerplot --fat -p $dotcall/$query $temp/tmp.m.delta`;
+        print STDERR "\n### $query = haplotig\n\n";
+        print STDERR "$MDPbin/MDP_mummerplot --fat -p $dotcall/$query $temp/tmp.m.delta\n";
+        `$MDPbin/MDP_mummerplot --fat -p $dotcall/$query $temp/tmp.m.delta`;
         unlink "$dotcall/$query.filter";
         unlink "$dotcall/$query.fplot";
         unlink "$dotcall/$query.rplot";
@@ -214,7 +218,8 @@ sub guess_assignment{
     } else {
         $purged{$query}=1;
         $a .= "?";
-        `MDP_mummerplot --fat -p $dotunk/$query $temp/tmp.m.delta`;
+        print STDERR "\n### $query = unsure, use your mk-I eyeballs\n\n";
+        `$MDPbin/MDP_mummerplot --fat -p $dotunk/$query $temp/tmp.m.delta`;
         unlink "$dotunk/$query.filter";
         unlink "$dotunk/$query.fplot";
         unlink "$dotunk/$query.rplot";

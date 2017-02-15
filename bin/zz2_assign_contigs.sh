@@ -85,7 +85,7 @@ if ! [[ -s "$TMPDIR/suspects.list" ]]; then
     elif [[ \"\$line\" =~ ([a-zA-Z0-9_-]+),[jJ], ]]; then\n\
         printf \"\${BASH_REMATCH[1]}\\\\n\" >> $TMPDIR/junk.list\n\
     fi\n\
-done < $1"
+done < $1\n"
     while IFS='' read -r line || [[ -n "$line" ]]; do
         if [[ "$line" =~ ([a-zA-Z0-9_-]+),[sS], ]]; then
             printf "${BASH_REMATCH[1]}\n" >> $TMPDIR/suspects.list
@@ -118,6 +118,7 @@ fi
 # analyse the blastn output, gen dotplots for reciprocal best hits
 if ! [[ -s suspect_contig_reassign.tsv ]]; then
     printf "\n### running blastn output analysis, generating dotplots and guessing assignment for suspect contigs\n"
+    printf "### this step will take a while...\n"
     printf "$SCRIPTDIR/analyze_blastn_output.pl -f $2 -b $TMPDIR/suspects.blastn.gz -t suspect_contig_reassign.tsv 2> $TMPDIR/analyse_blastn.log\n"
     $SCRIPTDIR/analyze_blastn_output.pl -f $2 -b $TMPDIR/suspects.blastn.gz -t suspect_contig_reassign.tsv 2> $TMPDIR/analyse_blastn.log
 else
