@@ -1,0 +1,18 @@
+#!/usr/bin/env Rscript
+
+# Usage: zz_gen_histogram.Rscript  hist.csv  out.png
+# hist file should be col.1: read depth, col.2: count
+# modify this file accordingly if you need to go over 200 depth (i.e. if the diploid peak is > 150)
+
+if (!require(ggplot2)) install.packages('ggplot2', repos='http://cran.rstudio.com/')
+
+library(ggplot2)
+
+args = commandArgs(trailingOnly=TRUE)
+data = read.csv(file=args[1], head=FALSE, sep=",")
+x = c(data$ V1)
+y = c(data$ V2)
+step = seq(0, 200, 5)
+png(filename = args[2], width = 1200, height = 800, units = "px")
+
+qplot(x,y, xlab="read depth", ylab="count") + scale_x_continuous(limits=c(0,200), breaks=(step))
