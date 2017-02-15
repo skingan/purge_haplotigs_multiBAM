@@ -4,8 +4,6 @@ use strict;
 use warnings;
 use Getopt::Long;
 
-
-
 my $usage = "
 Usage:
 
@@ -24,7 +22,7 @@ NEED ONE OF:
 my $in;
 my $list;
 my $ms;
-my @lms;
+my %contigs;
 my $IN;
 my $LIST;
 
@@ -41,26 +39,32 @@ if ( (!($ms) && !($list)) || ($ms) && ($list) ){
 open($IN, $in) or die "couldn't open $in for reading\n";
 
 if ($list){
+    print STDERR "Matching contigs:\n";
     open($LIST, $list) or die "couldn't open $list for reading\n";
     while(<$LIST>){
         $_ =~ s/\s//g;
-        push @lms, $_;
+        $contigs{$_} = 1;
+        print STDERR "$_\n";
     }
 }
 
 my $m = 0;
 while (<$IN>) {
-    if ($_ !~ />/) {
+    if ($_ !~ /^>/) {
         print STDOUT $_ if ($m == 1);
     } else {
         if ($list){
-            $m = 0;
-            MATCH: foreach my $lm(@lms){
-                if ($_ =~ /$lm\s/){
-                    $m = 1;
-                    print STDOUT $_;
-                    last MATCH;
-                }
+            my $id;
+            if ($_ =~ /^>([a-zA-Z0-9_-]+)\s/){
+                $id = $1;
+            } else {
+                die "failed to get id from fasta file\n";
+            }
+            if ($contigs{$id}){
+                $m=1;
+                print STDOUT $_;
+            } else {
+                $m = 0;
             }
         } else {
             if ($_ =~ /$ms\s/) {
