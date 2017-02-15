@@ -39,12 +39,12 @@ if ( (!($ms) && !($list)) || ($ms) && ($list) ){
 open($IN, $in) or die "couldn't open $in for reading\n";
 
 if ($list){
-    print STDERR "Matching contigs:\n";
+#    print STDERR "Matching contigs:\n";
     open($LIST, $list) or die "couldn't open $list for reading\n";
     while(<$LIST>){
         $_ =~ s/\s//g;
         $contigs{$_} = 1;
-        print STDERR "$_\n";
+#        print STDERR "$_\n";
     }
 }
 
