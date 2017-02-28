@@ -1,4 +1,9 @@
+#!/usr/bin/env bash
+
 make
+if ! [[ -d ../bin ]]; then
+    mkdir ../bin
+fi
 cd ../bin
 ln -s -T ../MDP_MUMer/mummer MDP_mummer
 ln -s -T ../MDP_MUMer/nucmer MDP_nucmer
