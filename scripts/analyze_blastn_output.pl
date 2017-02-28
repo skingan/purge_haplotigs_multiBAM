@@ -122,7 +122,13 @@ foreach my $contig (keys(%hits)){
     }
 }
 
-# TESTING
+
+print $OUT "#for cropping, specify the section to KEEP\n";
+print $OUT "#example_crop1\tmatch1\tmatch2\t50.00\t50.00\tc\tstart\t500000\n";
+print $OUT "#example_crop2\tmatch1\tmatch2\t50.00\t50.00\tc\t500000\tend\n";
+print $OUT "#example_crop3\tmatch1\tmatch2\t50.00\t50.00\tc\t250000\t750000\n";
+print $OUT "#note for reassign key: everything other than 'c', 'r', and 'h' will be ignored\n";
+print $OUT "#\n";
 print $OUT "#SUSPECT_CONTIG\tTOP_MATCH\tSECOND_MATCH\tMaxMatchCov\tBestMatchCov\tREASSGIN_KEY\tCROP_START\tCROP_END\n";
 print $OUT "#Reciprocal_best_hits\n";
 foreach my $contig (keys(%RBHs)){
@@ -148,16 +154,6 @@ foreach my $contig (sort(keys(%hits))){
     }
 }
 close($OUT);
-
-print STDERR "\nTable is saved in the following format (check and update the table, feed into next step of pipeline)\n";
-print STDERR "Reassign_keys: h = haplotig, r = repeat/assembly junk, c = crop, blank = no reassignment, ? = ¯\\_(^_^)_/¯\n";
-print STDERR "For cropping: positions are 1-indexed, can use \"start\" and \"end\" for start/end of contig\n\n";
-print STDERR "The crop region you specify here is the region you wish to KEEP.\n\n";
-print STDERR "#SUSPECT_CONTIG    TOP_MATCH  SECOND_MATCH  MAXMATCHCOV      BESTMATCHCOV      REASSGIN_KEY  CROP_START  CROP_END\n";
-print STDERR "#contig1           hit1       hit2          10.00            5.00              \n";
-print STDERR "#contig2           hit1       hit2          95.00            93.00             h\n";
-print STDERR "#contig3           hit1       hit2          400.00           98.00             r\n";
-print STDERR "#contig4           hit1       hit2          50.00            50.00             c             50000       end\n\n";
 
 exit(0);
 
