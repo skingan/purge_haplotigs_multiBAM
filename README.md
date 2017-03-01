@@ -79,7 +79,7 @@ NOTE: make sure the genome is indexed with samtools faidx (need genome.fasta.fai
 contig names should only contain alphanumerics, underscores, or hyphens (you'll need to edit the regex in the script otherwise)
 ```
 
-OPTIONAL: go through `suspect_contig_reassign.tsv` and the produced dotplots and make your own assessment; modify the .tsv file by hand.
+OPTIONAL: go through `suspect_contig_reassign.tsv` and the produced dotplots and make your own assessment; modify the .tsv file by hand. Otherwise the next step will just reassign the automatically identified contigs.
 
 ```
 #!text
