@@ -12,6 +12,16 @@ series of scripts to guide identifying haplotigs in a heterozygous diploid assem
     -scripts
 ```
 
+### Dependancies
+
+- bash
+- bedtools
+- Rscript with ggplot2
+- perl 
+- blast (blastn and makeblastdb)
+- make (for mummer)
+
+
 ### Install
 
 - pull/clone the git
