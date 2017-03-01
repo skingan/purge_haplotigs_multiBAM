@@ -12,7 +12,7 @@ series of scripts to guide identifying haplotigs in a heterozygous diploid assem
     -scripts
 ```
 
-### Dependancies
+### Dependencies
 
 - bash
 - bedtools
