@@ -2,15 +2,6 @@
 
 series of scripts to guide identifying haplotigs in a heterozygous diploid assembly (FALCON or FALCON-unzip)
 
-```
-#!text
--purge_haplotigs
-    -bin
-    -dotplot_maker
-        -bin
-        -MDP_MUMer
-    -scripts
-```
 
 ### Dependencies
 
@@ -23,6 +14,18 @@ series of scripts to guide identifying haplotigs in a heterozygous diploid assem
 
 
 ### Install
+
+directory structure
+
+```
+#!text
+-purge_haplotigs
+    -bin
+    -dotplot_maker
+        -bin
+        -MDP_MUMer
+    -scripts
+```
 
 - pull/clone the git
 - install mdp_mummer (I modified mummer with some fixes and to make nicer looking dotplots by default, otherwise it's essentially just the mummer package)
