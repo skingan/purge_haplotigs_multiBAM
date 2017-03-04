@@ -1,9 +1,16 @@
 # purge_haplotigs
 
-series of scripts to guide identifying haplotigs in a heterozygous diploid assembly (FALCON or FALCON-unzip)
+Series of scripts to guide identifying haplotigs in a heterozygous diploid genome assembly (such as using FALCON or FALCON-unzip).
 
+#### The problem
 
-### Dependencies
+Some parts of a genome may have a very high degree of heterozygosity. This causes contigs for both haplotypes of that part of the genome to be assembled as separate primary contigs, rather than as a contig and an associated haplotig. This can be an issue for downstream analysis.
+
+#### The solution
+
+Identify primary contigs that are haplotigs of other primary contigs, and move them to the haplotig 'pool'. These scripts use mapped coverage and blast/mummer alignments to guide this process. Dotplots are produced for all flagged contig matches to help the user determine the proper assignment of ambiguous contigs.
+
+## Dependencies
 
 - bash
 - bedtools
@@ -13,7 +20,7 @@ series of scripts to guide identifying haplotigs in a heterozygous diploid assem
 - make (for mummer)
 
 
-### Install
+## Install
 
 directory structure
 
@@ -28,36 +35,50 @@ directory structure
 ```
 
 - pull/clone the git
-- install mdp_mummer (I modified mummer with some fixes and to make nicer looking dotplots by default, otherwise it's essentially just the mummer package)
+- install MDP_mummer (modified mummer package: I made some fixes and changed some defaults to give nicer looking dotplots, otherwise it's essentially just the mummer package)
 
 ```
+#!bash
 cd /path/to/purge_haplotigs/dotplot_maker/MDP_MUMer
-./install.sh
+./install.sh        # tested on Ubuntu 16-LTS
 ```
 
- - add the purge_haplotigs bin to your system PATH (**not** the dotplot_maker/bin--the scripts will find the relative path to this directory).
+ - add the purge_haplotigs bin to your system PATH (**don't** need to add `dotplot_maker/bin` to the PATH as the scripts will find the relative path to this directory).
 
 ```
+#!bash
 cd /path/to/purge_haplotigs/bin
-$PATH=$PATH:$PWD
+PATH=$PATH:$PWD
 ```
 
 
-### Usage
+## Usage
 
-map pacbio subreads or some decent short reads to your genome (we want a library that produces nice even coverage; we also want a randombest alignment for multimappers), and sort the bam. 
+#### PREP
 
-- generate a coverage histogram (either manually or run the script)
+Map your pacbio subreads, or some decent short reads to your genome assembly (we want a library that produces a nice even coverage; we also want a randombest alignment for multimappers), and then sort the bam. The coverage is used to flag contigs that are likely to be haplotigs (or assembly junk etc).
+
+Index your genome.fasta file with smatools faidx if not already done.
+
+#### STEP 1
+
+Generate a coverage histogram (either by running the first script or using your favourite method)
 
 ```
+#!text
 zz0_coverage_hsitogram.sh aligned.sorted.bam
 ```
 
-eyeball the histogram, you should have two peaks, one for haploid level of coverage, the other for diploid level of coverage. choose cutoffs for low coverage, low point between the peaks, and high coverage (see example .png file)
+#### MANUAL STEP
 
-- run script to analyse the coverage on a contig by contig basis, produces a contig stats .csv file with flagged contigs for further analysis
+eyeball the histogram, you should have two peaks, one for haploid level of coverage, the other for diploid level of coverage. Choose cutoffs for low coverage, low point between the peaks, and high coverage (see the example .png file).
+
+#### STEP 2
+
+Run the second script to analyse the coverage on a contig by contig basis--produces a contig `stats.csv` file with flagged contigs for further analysis
 
 ```
+#!text
 zz1_analyse_gencov.pl  -i genecov.out  -o stats.csv  -l 30  -m 80  -h 145  [ -j 80  -s 80 ]
 
 -i      The output of bedtools genomecov
@@ -66,23 +87,25 @@ zz1_analyse_gencov.pl  -i genecov.out  -o stats.csv  -l 30  -m 80  -h 145  [ -j 
 -h      The read depth high cutoff
 -m      The low point between the haploid and diploid peaks
 
--j      Flag contig as \"j\" (junk) if this percentage or greater of the contig is 
+-j      Flag contig as "j" (junk) if this percentage or greater of the contig is 
             low/high coverage (default=80)
--s      Flag contig as \"s\" (suspected haplotig) if this percentage or more of the
+-s      Flag contig as "s" (suspected haplotig) if this percentage or more of the
             contig is haploid level of coverage (default=80)
 
 ```
 
-- Run script to guess the assignment of the flagged contigs (produces `suspect_contig_reassign.tsv` )
+#### STEP 3
+
+Run the third script to guess the assignment of the flagged contigs (produces `suspect_contig_reassign.tsv` )
 
 ```
+#!text
 zz2_assign_contigs.sh  stats.csv  genome.fasta
-
-NOTE: make sure the genome is indexed with samtools faidx (need genome.fasta.fai)
-contig names should only contain alphanumerics, underscores, or hyphens (you'll need to edit the regex in the script otherwise)
 ```
 
-OPTIONAL: go through `suspect_contig_reassign.tsv` and the produced dotplots and make your own assessment; modify the .tsv file by hand. Otherwise the next step will just reassign the automatically identified contigs.
+#### OPTIONAL MANUAL STEP
+
+Go through `suspect_contig_reassign.tsv` and the produced dotplots, make your own assessment and modify `suspect_contig_reassign.tsv` by hand. Otherwise the next step will just reassign the automatically identified contigs. 
 
 ```
 #!text
@@ -99,7 +122,9 @@ contig3            hit1       hit2          400.00           98.00             r
 contig4            hit1       hit2          50.00            50.00             c             50000       end
 ```
 
-- run script to create your new, cleaner assembly
+#### STEP 4
+
+Run the fourth script to create your new, cleaner assembly
 
 ```
 #!text
@@ -123,6 +148,7 @@ zz3_reassign_contigs.pl  -t suspect_contig_reassign.tsv  -g genome.fasta  -o out
 
 
 ```
+#### DONE
 
-You can concatonate the reassigned <prefix>.haplotigs.fasta to your original haplotigs
+You can concatenate the reassigned <prefix>.haplotigs.fasta to your original haplotigs
 file after this step (for instance if you've used FALCON-unzip).
