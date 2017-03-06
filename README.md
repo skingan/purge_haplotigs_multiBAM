@@ -8,7 +8,7 @@ Some parts of a genome may have a very high degree of heterozygosity. This cause
 
 #### The solution
 
-Identify primary contigs that are haplotigs of other primary contigs, and move them to the haplotig 'pool'. These scripts use mapped coverage and blast/mummer alignments to guide this process. Dotplots are produced for all flagged contig matches to help the user determine the proper assignment of ambiguous contigs.
+Identify primary contigs that are haplotigs of other primary contigs, and move them to the haplotig 'pool'. These scripts use mapped read coverage and blast/mummer alignments to guide this process. Dotplots are produced for all flagged contig matches to help the user determine the proper assignment of ambiguous contigs.
 
 ## Dependencies
 
@@ -58,7 +58,7 @@ PATH=$PATH:$PWD
 
 Map your pacbio subreads, or some decent short reads to your genome assembly (we want a library that produces a nice even coverage; we also want a randombest alignment for multimappers), and then sort the bam. The coverage is used to flag contigs that are likely to be haplotigs (or assembly junk etc).
 
-Index your genome.fasta file with smatools faidx if not already done.
+Index your genome.fasta file with samtools faidx if not already done.
 
 #### STEP 1
 
@@ -71,7 +71,9 @@ zz0_coverage_hsitogram.sh aligned.sorted.bam
 
 #### MANUAL STEP
 
-eyeball the histogram, you should have two peaks, one for haploid level of coverage, the other for diploid level of coverage. Choose cutoffs for low coverage, low point between the peaks, and high coverage (see the example .png file).
+eyeball the histogram, you should have two peaks, one for haploid level of coverage, the other for diploid level of coverage. Choose cutoffs for low coverage, low point between the peaks, and high coverage.
+
+[Example histogram and choosing cutoffs](https://bitbucket.org/mroachawri/purge_haplotigs/src/cf363f94c00fd865891a0469675d6df4a0813820/examples/example_histogram.png)
 
 #### STEP 2
 
@@ -105,7 +107,7 @@ zz2_assign_contigs.sh  stats.csv  genome.fasta
 
 #### OPTIONAL MANUAL STEP
 
-Go through `suspect_contig_reassign.tsv` and the produced dotplots, make your own assessment and modify `suspect_contig_reassign.tsv` by hand. Otherwise the next step will just reassign the automatically identified contigs. 
+Go through `suspect_contig_reassign.tsv`, look at the corresponding dotplots for each unknown contig, and make your own assessment. Modify `suspect_contig_reassign.tsv` by hand. Otherwise the next step will reassign the automatically identified contigs only.
 
 ```
 #!text
@@ -121,6 +123,12 @@ contig2            hit1       hit2          95.00            93.00             h
 contig3            hit1       hit2          400.00           98.00             r
 contig4            hit1       hit2          50.00            50.00             c             50000       end
 ```
+
+[Example: x-axis contig is a haplotig](https://bitbucket.org/mroachawri/purge_haplotigs/src/cf363f94c00fd865891a0469675d6df4a0813820/examples/example_haplotig.png)
+
+[Example: x-axis contig is partially a haplotig](https://bitbucket.org/mroachawri/purge_haplotigs/src/cf363f94c00fd865891a0469675d6df4a0813820/examples/example_partial_haplotig.png)
+
+[Example: x-axis contig is collapsed repeat/assembly junk](https://bitbucket.org/mroachawri/purge_haplotigs/src/cf363f94c00fd865891a0469675d6df4a0813820/examples/example_repetitive_junk_contig.png)
 
 #### STEP 4
 
