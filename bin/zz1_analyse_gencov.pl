@@ -57,6 +57,8 @@ GetOptions(
     "high=i" => \$highc,
     "mid=i" => \$midc,
     "auto=i" => \$junk,
+    "suspect=i" => \$suspect,
+    "junk=i" => \$junk,
     "suspect=i" => \$suspect
 ) or die $usage;
 
