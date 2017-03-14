@@ -159,7 +159,8 @@ sub pick_best_reference{
     
     # if both flagged as haplotigs or crop
         # choose largest bestmatch coverage
-    if ( ($table{$contig}{"A"} =~ /[ch]/) && ($table{$m_ctg}{"A"} =~ /[ch]/) ){
+    if ( (($table{$contig}{"A"} eq "h") && ($table{$m_ctg}{"A"} eq "h")) ||
+         (($table{$contig}{"A"} eq "c") && ($table{$m_ctg}{"A"} eq "c")) ){
         if ($table{$contig}{"B"} > $table{$m_ctg}{"B"}){
             $table{$m_ctg}{"A"} = "?";
             print STDERR "    keeping $m_ctg, reassigning $contig\n";
