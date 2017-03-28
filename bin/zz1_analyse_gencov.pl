@@ -33,10 +33,10 @@ my $suspect = 80;
 
 # globally declared for lazy subroutines
 my $base_count;
-my $n_low;
-my $n_hap;
-my $n_dip;
-my $n_high;
+my $n_low=0;
+my $n_hap=0;
+my $n_dip=0;
+my $n_high=0;
 my $low_p;
 my $hap_p;
 my $dip_p;

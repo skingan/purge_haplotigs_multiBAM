@@ -26,7 +26,7 @@ my $fasta;
 my $blast;
 my $tblout;
 my $max_match_cutoff = 150;
-my $align_match_cutoff = 75;
+my $align_match_cutoff = 85;
 
 GetOptions(
     "fastafai=s" => \$fasta,
@@ -116,8 +116,13 @@ foreach my $contig (keys(%hits)){
         }
     }
     
-    # ignore if contig is larger that both its hit seqs
-    elsif ( $length{$contig} > ($length{$hits{$contig}{1}} + $length{$hits{$contig}{2}}) ){
+    # ignore if contig is larger that both its hit seqs (or one best hit if it only has one)
+    elsif ($hits{$contig}{2}) {
+        if ( $length{$contig} > ($length{$hits{$contig}{1}} + $length{$hits{$contig}{2}}) ){
+            $purged{$contig} = 1;
+        }
+    }
+    elsif ($length{$contig} > $length{$hits{$contig}{1}}) {
         $purged{$contig} = 1;
     }
 }
@@ -136,8 +141,10 @@ foreach my $contig (keys(%RBHs)){
         # we assume the smaller contig is the haplotig
         print STDERR "$Bin/returnseq.pl -f $fasta -i $hits{$RBHs{$contig}}{1} > $temp/ref.fasta\n";
         `$Bin/returnseq.pl -f $fasta -i $hits{$RBHs{$contig}}{1} > $temp/ref.fasta`;
-        print STDERR "$Bin/returnseq.pl -f $fasta -i $hits{$RBHs{$contig}}{2} >> $temp/ref.fasta\n";
-        `$Bin/returnseq.pl -f $fasta -i $hits{$RBHs{$contig}}{2} >> $temp/ref.fasta`;
+        if ($hits{$RBHs{$contig}}{2}){
+            print STDERR "$Bin/returnseq.pl -f $fasta -i $hits{$RBHs{$contig}}{2} >> $temp/ref.fasta\n";
+            `$Bin/returnseq.pl -f $fasta -i $hits{$RBHs{$contig}}{2} >> $temp/ref.fasta`;
+        }
         my $assign = guess_assignment($RBHs{$contig});
         print $OUT "$RBHs{$contig}\t$contig\t$hits{$RBHs{$contig}}{2}\t$assign\n";
     }
