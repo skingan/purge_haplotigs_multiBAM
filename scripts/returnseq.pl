@@ -53,10 +53,11 @@ while (<$IN>) {
     } else {
         if ($list){
             my $id;
-            if ($_ =~ /^>([a-zA-Z0-9_-]+)\s/){
+            if ($_ =~ /^>([a-zA-Z0-9_-]+)[\s\|]/){
                 $id = $1;
             } else {
-                die "failed to get id from fasta file\n";
+                print STDERR "ERROR: failed to get id from fasta file, illegal characters in fasta seq names?\n";
+                exit(1);
             }
             if ($contigs{$id}){
                 $m=1;

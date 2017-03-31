@@ -79,14 +79,14 @@ while(<$IT>){
     # skip comments
     next if ($_ =~ /^#/);
     
-    my @line = split(/\s+/, $_);
+    my @line = split(/\s/, $_);
     if (scalar(@line) < 6){
-        die "error, columns missing in table .tsv file at line:\n@line\nexiting..."
+        err("ERROR: Columns missing in table .tsv file at line:\n@line\nexiting...");
     }
     
     # skip if nothing to be done with contig
     if ($line[5] !~ /^[rRhHcC]$/){
-        print STDERR "SKIP: nothing to be done for $line[0]\n";
+        print STDERR "INFO: nothing to be done for $line[0], skipping\n";
         next;
     }
     
@@ -110,7 +110,7 @@ close($IT);
 foreach my $contig (@contigs_for_reassigning){
     if ($table{$table{$contig}{1}}){
         if ( ($table{$table{$contig}{1}}{"A"} =~ /[hrc]/) && ($table{$contig}{"A"} =~ /[hrc]/) ){
-            print STDERR "WARN: $contig is both flagged for reassignment AND is a reference for flagging another contig for reassingmnet\n";
+            print STDERR "INFO: $contig is both flagged for reassignment AND is a reference for flagging another contig for reassingmnet\n";
             pick_best_reference($contig) if (!($force));
         }
     }
@@ -125,7 +125,7 @@ ITR: while(<$IG>){
         if ($_ =~ /^>([a-zA-Z0-9-_]+)\s/){
             $id = $1;
         } else {
-            die "illegal characters in seq ID?\n$_\n";
+            err("ERROR: illegal characters in seq ID?\n$_\n");
         }
 
         if (!($current_contig)){
@@ -163,10 +163,10 @@ sub pick_best_reference{
          (($table{$contig}{"A"} eq "c") && ($table{$m_ctg}{"A"} eq "c")) ){
         if ($table{$contig}{"B"} > $table{$m_ctg}{"B"}){
             $table{$m_ctg}{"A"} = "?";
-            print STDERR "    keeping $m_ctg, reassigning $contig\n";
+            print STDERR "INFO:    keeping $m_ctg, reassigning $contig\n";
         } else {
             $table{$contig}{"A"} = "?";
-            print STDERR "    keeping $contig, reassigning $m_ctg\n";
+            print STDERR "INFO:    keeping $contig, reassigning $m_ctg\n";
         }
     }
     
@@ -176,10 +176,10 @@ sub pick_best_reference{
             ( ($table{$contig}{"A"} eq "r")    && ($table{$m_ctg}{"A"} =~ /[hc]/) ) ){
         if ($table{$contig}{"A"} =~ /[hc]/){
             $table{$contig}{"A"} = "?";
-            print STDERR "    keeping $contig, reassigning $m_ctg\n";
+            print STDERR "INFO:    keeping $contig, reassigning $m_ctg\n";
         } else {
             $table{$m_ctg}{"A"} = "?";
-            print STDERR "    keeping $m_ctg, reassigning $contig\n";
+            print STDERR "INFO:    keeping $m_ctg, reassigning $contig\n";
         }
     }
     
@@ -189,21 +189,21 @@ sub pick_best_reference{
             ( ($table{$contig}{"A"} eq "c") && ($table{$m_ctg}{"A"} eq "h") ) ){
         if ($table{$contig}{"A"} eq "c"){
             $table{$contig}{"A"} = "?";
-            print STDERR "    keeping $contig, reassigning $m_ctg\n";
+            print STDERR "INFO:    keeping $contig, reassigning $m_ctg\n";
         } else {
             $table{$m_ctg}{"A"} = "?";
-            print STDERR "    keeping $m_ctg, reassigning $contig\n";
+            print STDERR "INFO:    keeping $m_ctg, reassigning $contig\n";
         }
     }
     
     # else if BOTH repetitive or crop 
         # choose BOTH
     elsif ( ($table{$contig}{"A"} eq "r") && ($table{$m_ctg}{"A"} eq "r") ){
-        print STDERR "    both $contig and $m_ctg are repeats/junk, reassigning both\n";
+        print STDERR "INFO:    both $contig and $m_ctg are repeats/junk, reassigning both\n";
     }
     
     else {
-        die "ERROR: unknown combination of reassigning flags\n$contig $table{$contig}{'A'}\n$m_ctg $table{$m_ctg}{'A'}\n";
+        err("ERROR: unknown combination of reassigning flags\n$contig $table{$contig}{'A'}\n$m_ctg $table{$m_ctg}{'A'}\n");
     }
 }
 
@@ -247,15 +247,15 @@ sub crop_and_print{
     
     # integer checks
     if ($cropstart !~ /^\d+$/){
-        die "ERROR: crop starting position not an integer\n$current_contig\n";
+        err("ERROR: crop starting position not an integer\n$current_contig\n");
     }
     if ($cropstop !~ /^\d+$/){
-        die "ERROR: crop stop position not an integer\n$current_contig\n";
+        err("ERROR: crop stop position not an integer\n$current_contig\n");
     }
     
     # other checks
     if ($cropstart > $cropstop){
-        die "ERROR, crop start position greater than crop stop position\n$current_contig\n";
+        err("ERROR: crop start position greater than crop stop position\n$current_contig\n");
     }
     
     # cut and print the seqs
@@ -265,7 +265,7 @@ sub crop_and_print{
         my $hseq1 = substr($current_seq, 0, $cropstart);
         my $hseq2 = substr($current_seq, $cropstop);
         if ( !($pseq) || !($hseq1) || !($hseq2)){
-            die "ERROR mid cropping $current_contig\n";
+            err("ERROR: problem with mid cropping $current_contig\n");
         }
         print_seq($OA, "$current_contig\_HAPLOTIG_C1", $hseq1);
         print_seq($OA, "$current_contig\_HAPLOTIG_C2", $hseq2);
@@ -276,7 +276,7 @@ sub crop_and_print{
         my $pseq = substr($current_seq, $cropstart, $cropstop);
         my $hseq = substr($current_seq, $cropstop);
         if (!($pseq) || !($hseq)){
-            die "ERROR left cropping $current_contig\n";
+            err("ERROR: problem left cropping $current_contig\n");
         }
         print_seq($OA, "$current_contig\_HAPLOTIG_C1", $hseq);
         print_seq($OG, $current_contig, $pseq);
@@ -286,7 +286,7 @@ sub crop_and_print{
         my $pseq = substr($current_seq, $cropstart);
         my $hseq = substr($current_seq, 0, $cropstart);
         if (!($pseq) || !($hseq)){
-            die "ERROR right cropping $current_contig\n";
+            err("ERROR: problem right cropping $current_contig\n");
         }
         print_seq($OA, "$current_contig\_HAPLOTIG_C1", $hseq);
         print_seq($OG, $current_contig, $pseq);
@@ -298,21 +298,21 @@ sub print_seq{
     my $id = $_[1];
     my $seq = $_[2];
     
-    print $FH ">$id\n";
+    print $FH ">$id";
     
-    my $linecount=0;
-    for (my $i=0; $i < length($seq); $i++){
-        print $FH substr($seq, $i, 1);
-        $linecount++;
-        if ($linecount == 100){
-            print $FH "\n";
-            $linecount = 0;
-        }
+    for (my $i=0; $i < (length($seq)-1); $i += 100){
+        print $FH "\n";
+        print $FH substr($seq, $i, 100);
     }
     
     print $FH "\n";
 }
 
+
+sub err {
+    print STDERR @_;
+    exit(1);
+}
 
 
 

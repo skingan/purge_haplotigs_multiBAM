@@ -19,7 +19,7 @@ OPTIONAL:
             matches 150 % or more to another contig then it's a collased repeat/assembly junk.
 -a      best alignment cutoff - for identifying haplotigs. -a 90 means that if a contig is not
             a collapsed repeat, and maps 90 % or more to another contig, then it's a haplotig.
-
+-u      Produce dotplots for unknown suspects only (don't make dotplots for auto-assigned contigs);
 ";
 
 # args
@@ -27,25 +27,29 @@ my $fasta;
 my $blast;
 my $tblout;
 my $seq_dir;
+my $unknown_only;
 my $max_match_cutoff = 150;
 my $align_match_cutoff = 85;
+
+my $no_call_cutoff = 20;
 
 GetOptions(
     "fastafai=s" => \$fasta,
     "dir=s" => \$seq_dir,
     "blast=s" => \$blast,
     "table=s" => \$tblout, 
+    "unknown" => \$unknown_only,
     "maxmatch=s" => \$max_match_cutoff,
     "alignmatch" => \$align_match_cutoff
-) or die $usage;
+) or err($usage);
 
 if (!($fasta) || !($blast) || !($tblout) || !($seq_dir)){
-    die $usage;
+    err($usage);
 }
 
 # genome index
 if (!(-s $fasta)){
-    die "$fasta needs to be the samtools faidx index file for the genome, i.e. genome.fasta.fai\nERROR: cant find $fasta\n";
+    err("$fasta needs to be the samtools faidx index file for the genome, i.e. genome.fasta.fai\nERROR: cant find $fasta\n");
 }
 
 # tempfolder
@@ -60,7 +64,7 @@ my $dotcall = "dotplots_assigned";
 if (!(-d $dotunk)){
     mkdir $dotunk;
 }
-if (!(-d $dotcall)){
+if (!(-d $dotcall) && !($unknown_only)){
     mkdir $dotcall;
 }
 
@@ -89,6 +93,7 @@ open($OUT, ">$tblout") or err("failed to open $tblout for writing\n");
 # read in the contig lengths
 while (<$FAI>){
     my @line = split(/\s+/, $_);
+    $line[0] =~ s/\|.+//;
     $length{$line[0]} = $line[1];
 }
 close($FAI);
@@ -96,6 +101,8 @@ close($FAI);
 # read in blast output file
 while (<$BLST>){
     my @line = split(/\s+/, $_);
+    $line[0] =~ s/\|.+//;
+    $line[1] =~ s/\|.+//;
     if (!($hits{$line[0]}{1})){
         $hits{$line[0]}{1} = $line[1] if ($line[0] ne $line[1]); # shouldn't be self hits but just in case
     } elsif (!($hits{$line[0]}{2}) && ($hits{$line[0]}{1} ne $line[1])){
@@ -134,6 +141,9 @@ foreach my $contig (keys(%hits)){
     }
 }
 
+if ($unknown_only){
+    print STDERR "INFO: skipping generation of dotplots for auto-assigned contigs\n";
+}
 
 print $OUT "#for cropping, specify the section to KEEP\n";
 print $OUT "#example_crop1\tmatch1\tmatch2\t50.00\t50.00\tc\tstart\t500000\n";
@@ -143,6 +153,7 @@ print $OUT "#note for reassign key: everything other than 'c', 'r', and 'h' will
 print $OUT "#\n";
 print $OUT "#SUSPECT_CONTIG\tTOP_MATCH\tSECOND_MATCH\tMaxMatchCov\tBestMatchCov\tREASSGIN_KEY\tCROP_START\tCROP_END\n";
 print $OUT "#Reciprocal_best_hits\n";
+
 foreach my $contig (keys(%RBHs)){
     if (!($purged{$RBHs{$contig}})){
         # we assume the smaller contig is the haplotig
@@ -154,9 +165,10 @@ foreach my $contig (keys(%RBHs)){
         print $OUT "$RBHs{$contig}\t$contig\t$hits{$RBHs{$contig}}{2}\t$assign\n";
     }
 }
+
 print $OUT "#Everything_else\n";
 foreach my $contig (sort(keys(%hits))){
-    if (!($purged{$contig})){
+    if (!($purged{$contig}) && ($hits{$contig}{1})){
         runcmd("cat $seq_dir/$hits{$contig}{1}.fasta > $temp/ref.fasta\n");
         if ($hits{$contig}{2}){
             runcmd("cat $seq_dir/$hits{$contig}{2}.fasta >> $temp/ref.fasta\n");
@@ -165,6 +177,7 @@ foreach my $contig (sort(keys(%hits))){
         }
     }
 }
+
 close($OUT);
 
 exit(0);
@@ -183,7 +196,7 @@ sub guess_assignment{
     
     # deltas
     runcmd("$MDPbin/MDP_delta-filter -m $temp/tmp.delta > $temp/tmp.m.delta\n");
-    runcmd("$MDPbin/MDP_delta-filter -1 $temp/tmp.delta > $temp/tmp.1.delta");
+    runcmd("$MDPbin/MDP_delta-filter -r $temp/tmp.delta > $temp/tmp.r.delta\n");
     
     # all-match coverage
     print STDERR "$MDPbin/MDP_show-coords -b -c $temp/tmp.m.delta | grep -P \"\\s+\\d\" | awk '{ s+=\$10 } END { print s }'\n";
@@ -192,8 +205,8 @@ sub guess_assignment{
     print STDERR "MAXMATCH coverage = $maxmatch\n";
     
     # best-align coverage
-    print STDERR "$MDPbin/MDP_show-coords -b -c $temp/tmp.1.delta | grep -P \"\\s+\\d\" | awk '{ s+=\$10 } END { print s }'\n";
-    my $alignmatch = `$MDPbin/MDP_show-coords -b -c $temp/tmp.1.delta | grep -P \"\\s+\\d\" | awk '{ s+=\$10 } END { print s }'`;
+    print STDERR "$MDPbin/MDP_show-coords -b -c $temp/tmp.r.delta | grep -P \"\\s+\\d\" | awk '{ s+=\$10 } END { print s }'\n";
+    my $alignmatch = `$MDPbin/MDP_show-coords -b -c $temp/tmp.r.delta | grep -P \"\\s+\\d\" | awk '{ s+=\$10 } END { print s }'`;
     $alignmatch =~ s/\s//g;
     print STDERR "BESTMATCH coverage = $alignmatch\n";
     
@@ -204,40 +217,36 @@ sub guess_assignment{
         $purged{$query}=1;
         $a .= "r";
         print STDERR "\n### $query = repeat/assembly junk\n\n";
-        runcmd("$MDPbin/MDP_mummerplot --fat -p $dotcall/$query $temp/tmp.m.delta");
-        unlink "$dotcall/$query.filter";
-        unlink "$dotcall/$query.fplot";
-        unlink "$dotcall/$query.rplot";
-        unlink "$dotcall/$query.gp";
+        runcmd("$MDPbin/MDP_mummerplot --fat -p $dotcall/$query $temp/tmp.m.delta") if (!($unknown_only));
         
     } elsif ($alignmatch >= $align_match_cutoff){
         $purged{$query}=1;
         $a .= "h";
         print STDERR "\n### $query = haplotig\n\n";
-        runcmd("$MDPbin/MDP_mummerplot --fat -p $dotcall/$query $temp/tmp.m.delta");
-        unlink "$dotcall/$query.filter";
-        unlink "$dotcall/$query.fplot";
-        unlink "$dotcall/$query.rplot";
-        unlink "$dotcall/$query.gp";
+        runcmd("$MDPbin/MDP_mummerplot --fat -p $dotcall/$query $temp/tmp.m.delta") if (!($unknown_only));
         
+    } elsif ($maxmatch < $no_call_cutoff){
+        $a .= "?";
+        print STDERR "\n### $query = no call, insufficient seq homology to reference hits\n\n";
     } else {
         $purged{$query}=1;
         $a .= "?";
         print STDERR "\n### $query = unsure, use your mk-I eyeballs\n\n";
         runcmd("$MDPbin/MDP_mummerplot --fat -p $dotunk/$query $temp/tmp.m.delta\n");
-        unlink "$dotunk/$query.filter";
-        unlink "$dotunk/$query.fplot";
-        unlink "$dotunk/$query.rplot";
-        unlink "$dotunk/$query.gp";
     }
     
     # clean-up
-    print STDERR "rm $temp/tmp_query.fasta $temp/tmp.delta $temp/tmp.m.delta $temp/tmp.1.delta $temp/ref.fasta\n";    
-    unlink "$temp/tmp_query.fasta";
-    unlink "$temp/tmp.delta";
-    unlink "$temp/tmp.m.delta";
-    unlink "$temp/tmp.1.delta";
-    unlink "$temp/ref.fasta";
+    my @files_to_clean_up = (
+        "$dotcall/$query.filter", "$dotcall/$query.fplot", "$dotcall/$query.rplot", "$dotcall/$query.gp",
+        "$dotunk/$query.filter", "$dotunk/$query.fplot", "$dotunk/$query.rplot", "$dotunk/$query.gp",
+        "$temp/tmp_query.fasta", "$temp/tmp.delta", "$temp/tmp.m.delta", "$temp/tmp.r.delta", "$temp/ref.fasta"
+    );
+    foreach my $file (@files_to_clean_up){
+        if (-s $file){
+            print STDERR "INFO: cleaning up $file\n";
+            unlink $file;
+        }
+    }
     
     return($a);
 }

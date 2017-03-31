@@ -77,13 +77,14 @@ print $OUT "contig,contig_reassign,bases_hap_dip,bases_low_high,bases_all,perc_l
 
 while(<$IN>){
     ($cont, $cov, $bases, $all, $frac) = split(/\s+/, $_);
+    # remove vert bar stuff like |quiver and |arrow if present
+    $cont =~ s/\|.+//;
     # skip contigs with nothing
     next if ($cov == 0 && $frac == 1);
     # ignore genome histogram
     next if ($cont eq "genome");
     # initial iteration check
     $cont_cur = $cont if (!($cont_cur)); 
-
     if ($cont ne $cont_cur){
         print_contig();
                 

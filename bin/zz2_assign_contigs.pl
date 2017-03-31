@@ -14,6 +14,7 @@ my $bestmatch_cutoff = 80;
 
 my $stats_csv;
 my $genome_fasta;
+my $unknown_only;
 
 my $script_dir = "$Bin/../scripts";
 my $temp_dir = "tmp_reassign_contigs";
@@ -36,7 +37,8 @@ OPTIONAL:
         repetitive sequence. DEFAULT = $maxmatch_cutoff
 -a      Bestmatch cutoff percentage. Used to determine if a contig is a
         haplotig. DEFAULT = $bestmatch_cutoff
-
+-u      Produce dotplots for unknown contigs only (dont produce them
+        for the auto-assigned contigs)
 ";
 
 #---PARSE ARGS---
@@ -46,7 +48,8 @@ GetOptions(
     "genome=s" => \$genome_fasta,
     "proc=i" => \$threads,
     "maxmatch=i" => \$maxmatch_cutoff,
-    "allmatch=i" => \$bestmatch_cutoff
+    "allmatch=i" => \$bestmatch_cutoff,
+    "unknown" => \$unknown_only
 ) or die $usage;
 
 if ( !($stats_csv) || !($genome_fasta) ){
@@ -91,14 +94,16 @@ if (!(-s "$temp_dir/suspects.list")){
     my @junk;
     open(my $CSV, $stats_csv) or err("ERROR: Failed to open $stats_csv for reading\n");
     while(<$CSV>){
+        next if ($_ =~ /^#/);
         if ($_ =~ /([a-zA-Z0-9_-]+),[sS],/){
             push @suspects, $1;
-        } 
-        elsif ($_ =~ /([a-zA-Z0-9_-]+),[jJ],/){
+        } elsif ($_ =~ /([a-zA-Z0-9_-]+),[jJ],/){
             push @junk, $1;
+        } elsif ($_ !~ /([a-zA-Z0-9_-]+),/){
+            err("ERROR: Failed to get seq id from entry $_, illegal characters in seq name? Seq id should contain only a-z, A-Z, 0-9, _, -\n");
         }
     }
-    open my $SL, ">", "$temp_dir/suspects.list" or err ("ERROR: Failed to open $temp_dir/suspects.list for writing\n");
+    open my $SL, ">", "$temp_dir/suspects.list" or err("ERROR: Failed to open $temp_dir/suspects.list for writing\n");
     foreach(@suspects){
         print $SL "$_\n";
     }
@@ -138,7 +143,12 @@ if (!(-d $minced_dir)){
 
 
 # analyse the blastn output, gen dotplots for reciprocal best hits
-runcmd("$script_dir/analyze_blastn_output.pl -f $genome_fasta.fai -d $minced_dir -b $temp_dir/suspects.blastn.gz -t suspect_contig_reassign.tsv 1> $temp_dir/analyse_blastn.log 2>&1 \n");
+print STDERR "INFO: Starting analysis and assigning contigs, this may take a while, check $temp_dir/analyse_blastn.log and suspect_contig_reassign.tsv for progress\n";
+if ($unknown_only){
+    runcmd("$script_dir/analyze_blastn_output.pl -f $genome_fasta.fai -d $minced_dir -b $temp_dir/suspects.blastn.gz -t suspect_contig_reassign.tsv -u 1> $temp_dir/analyse_blastn.log 2>&1 \n");
+} else {
+    runcmd("$script_dir/analyze_blastn_output.pl -f $genome_fasta.fai -d $minced_dir -b $temp_dir/suspects.blastn.gz -t suspect_contig_reassign.tsv 1> $temp_dir/analyse_blastn.log 2>&1 \n");
+}
 
 
 

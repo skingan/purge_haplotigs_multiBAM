@@ -42,7 +42,7 @@ while (<$IN>) {
         print $OUT $_;
     } else {
         my $id;
-        if ($_ =~ /^>([a-zA-Z0-9_-]+)\s/){
+        if ($_ =~ /^>([a-zA-Z0-9_-]+)[\s\|]/){
             $id = $1;
             close $OUT if ($OUT);
             open $OUT, ">", "$outDIR/$id.fasta" or die "failed to open \"$outDIR/$id.fasta\" for writing\n";
