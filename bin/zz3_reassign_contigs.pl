@@ -15,10 +15,12 @@ reassign_contigs.pl  -t contig_table.tsv  -g genome.fasta  -o output_prefix
 -o/output_prefix    Prefix for the output files. The following files will be created: 
                     <prefix>.fasta              - new primary contig assembly
                     <prefix>.haplotigs.fasta    - primary contigs reassigned as haplotigs
-                    <prefix>.artefacts.fasta    - repeats and junk, probably not useful
+                    <prefix>.artefacts.fasta    - repeats and very low/high coverage, 
+                                                  contigs, probably not useful
 -force              Force reassignment (if contig is flagged for reassigning but is also
                     a reference for flagging another contig) off=script will try to 
                     determine which to keep.
+
 You can concatonate the reassigned <prefix>.haplotigs.fasta to your original haplotigs
 file after this step (for instance if you've used FALCON-unzip).
 
@@ -47,6 +49,7 @@ my $OH;
 my $OA;
 my $IT;
 my $IG;
+my $JL;
 
 # outfilenames
 my $outG = "$outprefix.fasta";
@@ -62,6 +65,9 @@ my %table;      # $table{"contig"}{1} = "contig-id"        top 2 hits for contig
                 #                 {C1} = INT               crop start
                 #                 {C2} = INT               crop_stop
 my @contigs_for_reassigning;
+my $junklist = "tmp_reassign_contigs/junk.list";
+my %junkcontigs;
+
 
 if ( (-s $outG) || (-s $outH) || (-s $outA) ){
     die "One or more of  the outifles:\n$outG\n$outH\n$outA\nalready exists, exiting...\n";
@@ -73,6 +79,12 @@ open($IG, $genome) or die "failed to open $genome for reading\n";
 open($OG, ">$outG") or die "failed to open $outG for writing\n";
 open($OH, ">$outH") or die "failed to open $outH for writing\n";
 open($OA, ">$outA") or die "failed to open $outA for writing\n";
+open($JL, $junklist) or die "failed to open $junklist for reading\n";
+
+# read in the list of junk contigs
+($_ =~ s/\s//g, $junkcontigs{$_} = 1) while(<$JL>);
+close($JL);
+
 
 # read in table file
 while(<$IT>){
@@ -122,7 +134,7 @@ my $current_seq;
 ITR: while(<$IG>){
     if ($_ =~ /^>/){
         my $id;
-        if ($_ =~ /^>([a-zA-Z0-9-_]+)\s/){
+        if ($_ =~ /^>([a-zA-Z0-9-_]+)[\s\|]/){  
             $id = $1;
         } else {
             err("ERROR: illegal characters in seq ID?\n$_\n");
@@ -132,8 +144,12 @@ ITR: while(<$IG>){
             $current_contig = $id;
             next ITR;
         }
-        # process the seq
-        write_current_seq();
+        # print to junk fasta if junk contig, otherwise process seq
+        if ($junkcontigs{$current_contig}){
+            print_seq($OA, "$current_contig\_REPEAT/JUNK", $current_seq);
+        } else {        
+            write_current_seq();
+        }
         
         # reset
         $current_contig = $id;
