@@ -9,8 +9,8 @@ use FindBin qw($Bin);
 #---PARAMS---
 
 my $threads = 4;
-my $maxmatch_cutoff = 150;
-my $bestmatch_cutoff = 80;
+my $maxmatch_cutoff = 175;
+my $bestmatch_cutoff = 85;
 
 my $stats_csv;
 my $genome_fasta;

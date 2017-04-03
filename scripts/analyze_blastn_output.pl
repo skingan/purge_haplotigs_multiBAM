@@ -196,7 +196,7 @@ sub guess_assignment{
     
     # deltas
     runcmd("$MDPbin/MDP_delta-filter -m $temp/tmp.delta > $temp/tmp.m.delta\n");
-    runcmd("$MDPbin/MDP_delta-filter -1 $temp/tmp.delta > $temp/tmp.1.delta\n");
+    runcmd("$MDPbin/MDP_delta-filter -r $temp/tmp.delta > $temp/tmp.r.delta\n");
     
     # all-match coverage
     print STDERR "$MDPbin/MDP_show-coords -b -c $temp/tmp.m.delta | grep -P \"\\s+\\d\" | awk '{ s+=\$10 } END { print s }'\n";
@@ -205,8 +205,8 @@ sub guess_assignment{
     print STDERR "MAXMATCH coverage = $maxmatch\n";
     
     # best-align coverage
-    print STDERR "$MDPbin/MDP_show-coords -b -c $temp/tmp.1.delta | grep -P \"\\s+\\d\" | awk '{ s+=\$10 } END { print s }'\n";
-    my $alignmatch = `$MDPbin/MDP_show-coords -b -c $temp/tmp.1.delta | grep -P \"\\s+\\d\" | awk '{ s+=\$10 } END { print s }'`;
+    print STDERR "$MDPbin/MDP_show-coords -b -c $temp/tmp.r.delta | grep -P \"\\s+\\d\" | awk '{ s+=\$10 } END { print s }'\n";
+    my $alignmatch = `$MDPbin/MDP_show-coords -b -c $temp/tmp.r.delta | grep -P \"\\s+\\d\" | awk '{ s+=\$10 } END { print s }'`;
     $alignmatch =~ s/\s//g;
     print STDERR "BESTMATCH coverage = $alignmatch\n";
     

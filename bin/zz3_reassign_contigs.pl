@@ -65,6 +65,8 @@ my %table;      # $table{"contig"}{1} = "contig-id"        top 2 hits for contig
                 #                 {C1} = INT               crop start
                 #                 {C2} = INT               crop_stop
 my @contigs_for_reassigning;
+
+# other
 my $junklist = "tmp_reassign_contigs/junk.list";
 my %junkcontigs;
 
@@ -76,10 +78,10 @@ if ( (-s $outG) || (-s $outH) || (-s $outA) ){
 # open files
 open($IT, $table) or die "failed to open $table for reading\n";
 open($IG, $genome) or die "failed to open $genome for reading\n";
+open($JL, $junklist) or die "failed to open $junklist for reading\n";
 open($OG, ">$outG") or die "failed to open $outG for writing\n";
 open($OH, ">$outH") or die "failed to open $outH for writing\n";
 open($OA, ">$outA") or die "failed to open $outA for writing\n";
-open($JL, $junklist) or die "failed to open $junklist for reading\n";
 
 # read in the list of junk contigs
 ($_ =~ s/\s//g, $junkcontigs{$_} = 1) while(<$JL>);
@@ -213,9 +215,15 @@ sub pick_best_reference{
     }
     
     # else if BOTH repetitive or crop 
-        # choose BOTH
+        # choose largest bestmatch cov - might need to modify
     elsif ( ($table{$contig}{"A"} eq "r") && ($table{$m_ctg}{"A"} eq "r") ){
-        print STDERR "INFO:    both $contig and $m_ctg are repeats/junk, reassigning both\n";
+        if ($table{$contig}{"B"} > $table{$m_ctg}{"B"}){
+            $table{$m_ctg}{"A"} = "?";
+            print STDERR "INFO:    keeping $m_ctg, reassigning $contig\n";
+        } else {
+            $table{$contig}{"A"} = "?";
+            print STDERR "INFO:    keeping $contig, reassigning $m_ctg\n";
+        }
     }
     
     else {
