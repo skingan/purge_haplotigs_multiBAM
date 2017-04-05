@@ -7,7 +7,7 @@ use FindBin qw($Bin);
 
 my $usage = "
 Usage:
-analyze_blastn_output.pl  -f genome.fasta  -b blastn_out.fmt6.gz  -t CONTIG_REASSIGN.tsv  [ -m 150  -a 90 ]
+analyze_blastn_output.pl  -f genome.fasta  -b blastn_out.fmt6.gz  -t CONTIG_REASSIGN.tsv  [ -m 250  -a 75 ]
 
 -f      genome.fasta file, needs to be indexed with samtools faidx
 -d      suspect fasta seq directory, output from zz2_assign_contigs.pl
@@ -28,8 +28,8 @@ my $blast;
 my $tblout;
 my $seq_dir;
 my $unknown_only;
-my $max_match_cutoff = 150;
-my $align_match_cutoff = 85;
+my $max_match_cutoff = 250;
+my $align_match_cutoff = 75;
 
 my $no_call_cutoff = 20;
 
@@ -40,7 +40,7 @@ GetOptions(
     "table=s" => \$tblout, 
     "unknown" => \$unknown_only,
     "maxmatch=s" => \$max_match_cutoff,
-    "alignmatch" => \$align_match_cutoff
+    "alignmatch=s" => \$align_match_cutoff
 ) or err($usage);
 
 if (!($fasta) || !($blast) || !($tblout) || !($seq_dir)){

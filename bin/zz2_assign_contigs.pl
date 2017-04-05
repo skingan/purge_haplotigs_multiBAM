@@ -9,8 +9,8 @@ use FindBin qw($Bin);
 #---PARAMS---
 
 my $threads = 4;
-my $maxmatch_cutoff = 175;
-my $bestmatch_cutoff = 85;
+my $maxmatch_cutoff = 250;
+my $bestmatch_cutoff = 75;
 
 my $stats_csv;
 my $genome_fasta;
@@ -145,9 +145,9 @@ if (!(-d $minced_dir)){
 # analyse the blastn output, gen dotplots for reciprocal best hits
 print STDERR "INFO: Starting analysis and assigning contigs, this may take a while, check $temp_dir/analyse_blastn.log and suspect_contig_reassign.tsv for progress\n";
 if ($unknown_only){
-    runcmd("$script_dir/analyze_blastn_output.pl -f $genome_fasta.fai -d $minced_dir -b $temp_dir/suspects.blastn.gz -t suspect_contig_reassign.tsv -u 1> $temp_dir/analyse_blastn.log 2>&1 \n");
+    runcmd("$script_dir/analyze_blastn_output.pl -f $genome_fasta.fai -d $minced_dir -b $temp_dir/suspects.blastn.gz -t suspect_contig_reassign.tsv -m $maxmatch_cutoff -a $bestmatch_cutoff -u 1> $temp_dir/analyse_blastn.log 2>&1 \n");
 } else {
-    runcmd("$script_dir/analyze_blastn_output.pl -f $genome_fasta.fai -d $minced_dir -b $temp_dir/suspects.blastn.gz -t suspect_contig_reassign.tsv 1> $temp_dir/analyse_blastn.log 2>&1 \n");
+    runcmd("$script_dir/analyze_blastn_output.pl -f $genome_fasta.fai -d $minced_dir -b $temp_dir/suspects.blastn.gz -t suspect_contig_reassign.tsv -m $maxmatch_cutoff -a $bestmatch_cutoff 1> $temp_dir/analyse_blastn.log 2>&1 \n");
 }
 
 

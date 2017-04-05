@@ -5,24 +5,6 @@ use Getopt::Long;
 
 # pipe script for analysing bedtools genomeCov output
 
-my $usage = "
-Usage:
-
-zz1_analyse_gencov.pl  -i genecov.out  -o stats.csv  -l 30  -m 80  -h 145  [ -j 80  -s 80 ]
-
-REQUIRED:
--i      The output of bedtools genomecov
--o      Output file name (csv format)
--l      The read depth low cutoff (use the histogram to eyeball these cutoffs)
--h      The read depth high cutoff
--m      The low point between the haploid and diploid peaks
--j      Auto-assign contig as \"j\" (junk) if this percentage or greater of the contig is 
-            low/high coverage (default=80, 0=off)
--s      Auto-assign contig as \"s\" (suspected haplotig) if this percentage or more of the
-            contig is haploid level of coverage (default=80, 0=off)
-
-";
-
 my $incov;
 my $outcsv;
 my $lowc;
@@ -30,6 +12,27 @@ my $midc;
 my $highc;
 my $junk = 80;
 my $suspect = 80;
+
+my $usage = "
+Usage:
+
+zz1_analyse_gencov.pl  -i genecov.out  -o stats.csv  -l 30  -m 80  -h 145  [ -j $junk  -s $suspect ]
+
+REQUIRED:
+-i      The output of bedtools genomecov
+-o      Output file name (csv format)
+-l      The read depth low cutoff (use the histogram to eyeball these cutoffs)
+-h      The read depth high cutoff
+-m      The low point between the haploid and diploid peaks
+
+OPTIONAL:
+-j      Auto-assign contig as \"j\" (junk) if this percentage or greater of the contig is 
+            low/high coverage (default=$junk, >100 = off)
+-s      Auto-assign contig as \"s\" (suspected haplotig) if this percentage or less of the
+            contig is diploid level of coverage (default=$suspect)
+
+";
+
 
 # globally declared for lazy subroutines
 my $base_count;
@@ -145,7 +148,7 @@ sub print_contig {
         }
     }
     if ($suspect){
-        if ($hap_p >= $suspect){
+        if ($dip_p <= $suspect){
             $assign = "s" if (!($assign));
         }
     }

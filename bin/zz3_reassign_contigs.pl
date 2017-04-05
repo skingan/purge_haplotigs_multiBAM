@@ -50,6 +50,7 @@ my $OA;
 my $IT;
 my $IG;
 my $JL;
+my $FF;
 
 # outfilenames
 my $outG = "$outprefix.fasta";
@@ -69,24 +70,39 @@ my @contigs_for_reassigning;
 # other
 my $junklist = "tmp_reassign_contigs/junk.list";
 my %junkcontigs;
-
+my %contig_length;
 
 if ( (-s $outG) || (-s $outH) || (-s $outA) ){
     die "One or more of  the outifles:\n$outG\n$outH\n$outA\nalready exists, exiting...\n";
+}
+
+# fasta .fai file
+my $fastafai = "$genome.fai";
+if (!(-s $fastafai)){
+    die "genome index $fastafai appears to be missing, have you indexed with samtools faidx?\n";
 }
 
 # open files
 open($IT, $table) or die "failed to open $table for reading\n";
 open($IG, $genome) or die "failed to open $genome for reading\n";
 open($JL, $junklist) or die "failed to open $junklist for reading\n";
+open($FF, $fastafai) or die "failed to open $fastafai for reading\n";
 open($OG, ">$outG") or die "failed to open $outG for writing\n";
 open($OH, ">$outH") or die "failed to open $outH for writing\n";
 open($OA, ">$outA") or die "failed to open $outA for writing\n";
+
 
 # read in the list of junk contigs
 ($_ =~ s/\s//g, $junkcontigs{$_} = 1) while(<$JL>);
 close($JL);
 
+# read in contig lengths
+while(<$FF>){
+    my @line = split(/\s/, $_);
+    $line[0] =~ s/\|.+$//;
+    $contig_length{$line[0]} = $line[1];
+}
+close($FF);
 
 # read in table file
 while(<$IT>){
@@ -176,10 +192,10 @@ sub pick_best_reference{
     my $m_ctg = $table{$contig}{1};
     
     # if both flagged as haplotigs or crop
-        # choose largest bestmatch coverage
+        # keep the longest contig
     if ( (($table{$contig}{"A"} eq "h") && ($table{$m_ctg}{"A"} eq "h")) ||
          (($table{$contig}{"A"} eq "c") && ($table{$m_ctg}{"A"} eq "c")) ){
-        if ($table{$contig}{"B"} > $table{$m_ctg}{"B"}){
+        if ($contig_length{$contig} < $contig_length{$m_ctg}){
             $table{$m_ctg}{"A"} = "?";
             print STDERR "INFO:    keeping $m_ctg, reassigning $contig\n";
         } else {
@@ -215,9 +231,9 @@ sub pick_best_reference{
     }
     
     # else if BOTH repetitive or crop 
-        # choose largest bestmatch cov - might need to modify
+        # choose longest contig
     elsif ( ($table{$contig}{"A"} eq "r") && ($table{$m_ctg}{"A"} eq "r") ){
-        if ($table{$contig}{"B"} > $table{$m_ctg}{"B"}){
+        if ($contig_length{$contig} < $contig_length{$m_ctg}){
             $table{$m_ctg}{"A"} = "?";
             print STDERR "INFO:    keeping $m_ctg, reassigning $contig\n";
         } else {
