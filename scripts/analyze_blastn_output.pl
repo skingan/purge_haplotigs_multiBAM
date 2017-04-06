@@ -4,25 +4,11 @@ use strict;
 use warnings;
 use Getopt::Long;
 use FindBin qw($Bin);
+use threads;
+use Thread::Semaphore;
 
-my $usage = "
-Usage:
-analyze_blastn_output.pl  -f genome.fasta  -b blastn_out.fmt6.gz  -t CONTIG_REASSIGN.tsv  [ -m 250  -a 75 ]
 
--f      genome.fasta file, needs to be indexed with samtools faidx
--d      suspect fasta seq directory, output from zz2_assign_contigs.pl
--b      the output from zz1_ pipeline step (blastn, -outfmt 6, optionally gzipped)
--t      output .tsv file which then needs to be edited and fed into next step
-
-OPTIONAL:
--m      maxmatch cutoff - for finding collapsed repeat contigs. -m 150 means that if a contig 
-            matches 150 % or more to another contig then it's a collased repeat/assembly junk.
--a      best alignment cutoff - for identifying haplotigs. -a 90 means that if a contig is not
-            a collapsed repeat, and maps 90 % or more to another contig, then it's a haplotig.
--u      Produce dotplots for unknown suspects only (don't make dotplots for auto-assigned contigs);
-";
-
-# args
+# params
 my $fasta;
 my $blast;
 my $tblout;
@@ -30,8 +16,27 @@ my $seq_dir;
 my $unknown_only;
 my $max_match_cutoff = 250;
 my $align_match_cutoff = 75;
-
+my $threads = 4;
 my $no_call_cutoff = 20;
+
+my $usage = "
+Usage:
+analyze_blastn_output.pl  -f genome.fasta  -b blastn_out.fmt6.gz  -t CONTIG_REASSIGN.tsv  [ -p $threads -m $max_match_cutoff  -a $align_match_cutoff ]
+
+-f      genome.fasta file, needs to be indexed with samtools faidx
+-d      suspect fasta seq directory, output from zz2_assign_contigs.pl
+-b      the output from zz1_ pipeline step (blastn, -outfmt 6, optionally gzipped)
+-t      output .tsv file which then needs to be edited and fed into next step
+
+OPTIONAL:
+-p      Threads, default = $threads.
+-m      maxmatch cutoff - for finding collapsed repeat contigs. -m $max_match_cutoff means that if a contig 
+            matches $max_match_cutoff % or more to another contig then it's a collased repeat/assembly junk.
+-a      best alignment cutoff - for identifying haplotigs. -a $align_match_cutoff means that if a contig is not
+            a collapsed repeat, and maps $align_match_cutoff % or more to another contig, then it's a haplotig.
+-u      Produce dotplots for unknown suspects only (don't make dotplots for auto-assigned contigs);
+";
+
 
 GetOptions(
     "fastafai=s" => \$fasta,
@@ -39,6 +44,7 @@ GetOptions(
     "blast=s" => \$blast,
     "table=s" => \$tblout, 
     "unknown" => \$unknown_only,
+    "procs=i" => \$threads,
     "maxmatch=s" => \$max_match_cutoff,
     "alignmatch=s" => \$align_match_cutoff
 ) or err($usage);
@@ -80,6 +86,12 @@ my %RBHs; # $RBHs{largercontig} = smallercontig
 my %purged; # $purged{contig} = 1
 
 my $MDPbin = "$Bin/../dotplot_maker/bin/";
+
+
+# set up for multithreading
+my $available_threads = Thread::Semaphore->new($threads);
+my $writing_to_out = Thread::Semaphore->new(1);
+my $jobnumber = 0;
 
 # open files
 open($FAI, $fasta) or err("failed to open $fasta for reading\n");
@@ -155,26 +167,24 @@ print $OUT "#SUSPECT_CONTIG\tTOP_MATCH\tSECOND_MATCH\tMaxMatchCov\tBestMatchCov\
 print $OUT "#Reciprocal_best_hits\n";
 
 foreach my $contig (keys(%RBHs)){
-    if (!($purged{$RBHs{$contig}})){
-        # we assume the smaller contig is the haplotig
-        runcmd("cat $seq_dir/$hits{$RBHs{$contig}}{1}.fasta > $temp/ref.fasta\n");
-        if ($hits{$RBHs{$contig}}{2}){
-            runcmd("cat $seq_dir/$hits{$RBHs{$contig}}{2}.fasta >> $temp/ref.fasta\n");
-        }
-        my $assign = guess_assignment($RBHs{$contig});
-        print $OUT "$RBHs{$contig}\t$contig\t$hits{$RBHs{$contig}}{2}\t$assign\n";
-    }
+    $available_threads->down(1);
+    threads->create(\&RBH, $jobnumber, $contig);
+    $jobnumber++;
 }
 
 print $OUT "#Everything_else\n";
 foreach my $contig (sort(keys(%hits))){
-    if (!($purged{$contig}) && ($hits{$contig}{1})){
-        runcmd("cat $seq_dir/$hits{$contig}{1}.fasta > $temp/ref.fasta\n");
-        if ($hits{$contig}{2}){
-            runcmd("cat $seq_dir/$hits{$contig}{2}.fasta >> $temp/ref.fasta\n");
-            my $assign = guess_assignment($contig);
-            print $OUT "$contig\t$hits{$contig}{1}\t$hits{$contig}{2}\t$assign\n";
-        }
+    $available_threads->down(1);
+    threads->create(\&EE, $jobnumber, $contig);
+    $jobnumber++;
+}
+
+# wait on remaining jobs
+while(){
+    if (threads->list()){
+        sleep 0.5;
+    } else {
+        last;
     }
 }
 
@@ -185,30 +195,74 @@ exit(0);
 
 #---SUBROUTINES---
 
+sub RBH {
+    my $job = $_[0];
+    my $contig = $_[1];
+    
+    if (!($purged{$RBHs{$contig}})){
+        # we assume the smaller contig is the haplotig
+        runcmd("cat $seq_dir/$hits{$RBHs{$contig}}{1}.fasta > $temp/$job.ref.fasta\n");
+        if ($hits{$RBHs{$contig}}{2}){
+            runcmd("cat $seq_dir/$hits{$RBHs{$contig}}{2}.fasta >> $temp/$job.ref.fasta\n");
+        }
+        my $assign = guess_assignment($RBHs{$contig}, $job);
+        $writing_to_out->down(1);
+        print $OUT "$RBHs{$contig}\t$contig\t$hits{$RBHs{$contig}}{2}\t$assign\n";
+        $writing_to_out->up(1);
+    }
+    
+    # exit
+    $available_threads->up(1);
+    threads->detach();
+}
+
+sub EE {
+    my $job = $_[0];
+    my $contig = $_[1];
+    
+    if (!($purged{$contig}) && ($hits{$contig}{1})){
+        runcmd("cat $seq_dir/$hits{$contig}{1}.fasta > $temp/$job.ref.fasta\n");
+        if ($hits{$contig}{2}){
+            runcmd("cat $seq_dir/$hits{$contig}{2}.fasta >> $temp/$job.ref.fasta\n");
+            my $assign = guess_assignment($contig, $job);
+            $writing_to_out->down(1);
+            print $OUT "$contig\t$hits{$contig}{1}\t$hits{$contig}{2}\t$assign\n";
+            $writing_to_out->up(1);
+        }
+    }
+    # exit
+    $available_threads->up(1);
+    threads->detach();
+}
+
 sub guess_assignment{
     my $query = $_[0];
-    my $ref = "$temp/ref.fasta";
+    my $job = $_[1];
+    
+    my @LOG = ();
+    
+    my $ref = "$temp/$job.ref.fasta";
     # get seq
-    runcmd("cat $seq_dir/$query.fasta > $temp/tmp_query.fasta\n");
+    runcmd("cat $seq_dir/$query.fasta > $temp/$job.tmp_query.fasta\n");
     
     # nucmer
-    runcmd("$MDPbin/MDP_nucmer --maxmatch -p $temp/tmp $temp/tmp_query.fasta $ref\n");
+    runcmd("$MDPbin/MDP_nucmer --maxmatch -p $temp/$job.tmp $temp/$job.tmp_query.fasta $ref\n");
     
     # deltas
-    runcmd("$MDPbin/MDP_delta-filter -m $temp/tmp.delta > $temp/tmp.m.delta\n");
-    runcmd("$MDPbin/MDP_delta-filter -r $temp/tmp.delta > $temp/tmp.r.delta\n");
+    runcmd("$MDPbin/MDP_delta-filter -m $temp/$job.tmp.delta > $temp/$job.tmp.m.delta\n");
+    runcmd("$MDPbin/MDP_delta-filter -r $temp/$job.tmp.delta > $temp/$job.tmp.r.delta\n");
     
     # all-match coverage
-    print STDERR "$MDPbin/MDP_show-coords -b -c $temp/tmp.m.delta | grep -P \"\\s+\\d\" | awk '{ s+=\$10 } END { print s }'\n";
-    my $maxmatch = `$MDPbin/MDP_show-coords -b -c $temp/tmp.m.delta | grep -P \"\\s+\\d\" | awk '{ s+=\$10 } END { print s }'`;
+    push @LOG, "$MDPbin/MDP_show-coords -b -c $temp/$job.tmp.m.delta | grep -P \"\\s+\\d\" | awk '{ s+=\$10 } END { print s }'\n";
+    my $maxmatch = `$MDPbin/MDP_show-coords -b -c $temp/$job.tmp.m.delta | grep -P \"\\s+\\d\" | awk '{ s+=\$10 } END { print s }'`;
     $maxmatch =~ s/\s//g;
-    print STDERR "MAXMATCH coverage = $maxmatch\n";
+    push @LOG, "MAXMATCH coverage = $maxmatch\n";
     
     # best-align coverage
-    print STDERR "$MDPbin/MDP_show-coords -b -c $temp/tmp.r.delta | grep -P \"\\s+\\d\" | awk '{ s+=\$10 } END { print s }'\n";
-    my $alignmatch = `$MDPbin/MDP_show-coords -b -c $temp/tmp.r.delta | grep -P \"\\s+\\d\" | awk '{ s+=\$10 } END { print s }'`;
+    push @LOG, "$MDPbin/MDP_show-coords -b -c $temp/$job.tmp.r.delta | grep -P \"\\s+\\d\" | awk '{ s+=\$10 } END { print s }'\n";
+    my $alignmatch = `$MDPbin/MDP_show-coords -b -c $temp/$job.tmp.r.delta | grep -P \"\\s+\\d\" | awk '{ s+=\$10 } END { print s }'`;
     $alignmatch =~ s/\s//g;
-    print STDERR "BESTMATCH coverage = $alignmatch\n";
+    push @LOG, "BESTMATCH coverage = $alignmatch\n";
     
     my $a = "$maxmatch\t$alignmatch\t";
     
@@ -216,41 +270,43 @@ sub guess_assignment{
     if ( ($maxmatch >= $max_match_cutoff) && ($alignmatch >= $align_match_cutoff) ) {
         $purged{$query}=1;
         $a .= "r";
-        print STDERR "\n### $query = repeat/assembly junk\n\n";
-        runcmd("$MDPbin/MDP_mummerplot --fat -p $dotcall/$query $temp/tmp.m.delta") if (!($unknown_only));
+        push @LOG, "\n### $query = repeat/assembly junk\n\n";
+        runcmd("$MDPbin/MDP_mummerplot --fat -p $dotcall/$query $temp/$job.tmp.m.delta") if (!($unknown_only));
         
     } elsif ($alignmatch >= $align_match_cutoff){
         $purged{$query}=1;
         $a .= "h";
-        print STDERR "\n### $query = haplotig\n\n";
-        runcmd("$MDPbin/MDP_mummerplot --fat -p $dotcall/$query $temp/tmp.m.delta") if (!($unknown_only));
+        push @LOG, "\n### $query = haplotig\n\n";
+        runcmd("$MDPbin/MDP_mummerplot --fat -p $dotcall/$query $temp/$job.tmp.m.delta") if (!($unknown_only));
         
     } elsif ($maxmatch < $no_call_cutoff){
         $a .= "?";
-        print STDERR "\n### $query = no call, insufficient seq homology to reference hits\n\n";
+        push @LOG, "\n### $query = no call, insufficient seq homology to reference hits\n\n";
     } else {
         $purged{$query}=1;
         $a .= "?";
-        print STDERR "\n### $query = unsure, use your mk-I eyeballs\n\n";
-        runcmd("$MDPbin/MDP_mummerplot --fat -p $dotunk/$query $temp/tmp.m.delta\n");
+        push @LOG, "\n### $query = unsure, use your mk-I eyeballs\n\n";
+        runcmd("$MDPbin/MDP_mummerplot --fat -p $dotunk/$query $temp/$job.tmp.m.delta\n");
     }
     
     # clean-up
     my @files_to_clean_up = (
         "$dotcall/$query.filter", "$dotcall/$query.fplot", "$dotcall/$query.rplot", "$dotcall/$query.gp",
         "$dotunk/$query.filter", "$dotunk/$query.fplot", "$dotunk/$query.rplot", "$dotunk/$query.gp",
-        "$temp/tmp_query.fasta", "$temp/tmp.delta", "$temp/tmp.m.delta", "$temp/tmp.r.delta", "$temp/ref.fasta"
+        "$temp/$job.tmp_query.fasta", "$temp/$job.tmp.delta", "$temp/$job.tmp.m.delta", "$temp/$job.tmp.r.delta", "$temp/$job.ref.fasta"
     );
     foreach my $file (@files_to_clean_up){
         if (-s $file){
-            print STDERR "INFO: cleaning up $file\n";
+            push @LOG, "INFO: cleaning up $file\n";
             unlink $file;
         }
     }
+    $writing_to_out->down(1);
+    print STDERR @LOG;
+    $writing_to_out->up(1);
     
     return($a);
 }
-
 
 sub err {
     print STDERR @_;
