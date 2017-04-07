@@ -198,16 +198,33 @@ exit(0);
 sub RBH {
     my $job = $_[0];
     my $contig = $_[1];
+    my $cmd;
+    
+    my $LOG;
     
     if (!($purged{$RBHs{$contig}})){
         # we assume the smaller contig is the haplotig
-        runcmd("cat $seq_dir/$hits{$RBHs{$contig}}{1}.fasta > $temp/$job.ref.fasta\n");
+        
+        $cmd = "cat $seq_dir/$hits{$RBHs{$contig}}{1}.fasta > $temp/$job.ref.fasta\n";
+        $LOG .= $cmd;
+        runcmd($cmd);
+        
         if ($hits{$RBHs{$contig}}{2}){
-            runcmd("cat $seq_dir/$hits{$RBHs{$contig}}{2}.fasta >> $temp/$job.ref.fasta\n");
+            
+            $cmd = "cat $seq_dir/$hits{$RBHs{$contig}}{2}.fasta >> $temp/$job.ref.fasta\n";
+            $LOG .= $cmd;
+            runcmd($cmd);
+            
         }
-        my $assign = guess_assignment($RBHs{$contig}, $job);
+        my ($assign, $S_LOG) = guess_assignment($RBHs{$contig}, $job);
+        
+        $LOG .= $S_LOG;
+        
+        # print output
         $writing_to_out->down(1);
         print $OUT "$RBHs{$contig}\t$contig\t$hits{$RBHs{$contig}}{2}\t$assign\n";
+        # print log
+        print STDERR "$LOG\n###\n\n";
         $writing_to_out->up(1);
     }
     
@@ -219,14 +236,31 @@ sub RBH {
 sub EE {
     my $job = $_[0];
     my $contig = $_[1];
+    my $cmd;
+    
+    my $LOG;
     
     if (!($purged{$contig}) && ($hits{$contig}{1})){
-        runcmd("cat $seq_dir/$hits{$contig}{1}.fasta > $temp/$job.ref.fasta\n");
+        
+        $cmd = "cat $seq_dir/$hits{$contig}{1}.fasta > $temp/$job.ref.fasta\n";
+        $LOG .= $cmd;
+        runcmd($cmd);
+        
         if ($hits{$contig}{2}){
-            runcmd("cat $seq_dir/$hits{$contig}{2}.fasta >> $temp/$job.ref.fasta\n");
-            my $assign = guess_assignment($contig, $job);
+            
+            $cmd = "cat $seq_dir/$hits{$contig}{2}.fasta >> $temp/$job.ref.fasta\n";
+            $LOG .= $cmd;
+            runcmd($cmd);
+            
+            my ($assign, $S_LOG) = guess_assignment($contig, $job);
+            
+            $LOG .= $S_LOG;
+            
+            # print output
             $writing_to_out->down(1);
             print $OUT "$contig\t$hits{$contig}{1}\t$hits{$contig}{2}\t$assign\n";
+            # print log
+            print STDERR "$LOG\n###\n\n";
             $writing_to_out->up(1);
         }
     }
@@ -238,31 +272,42 @@ sub EE {
 sub guess_assignment{
     my $query = $_[0];
     my $job = $_[1];
-    
-    my @LOG = ();
+    my $LOG;
+    my $cmd;
     
     my $ref = "$temp/$job.ref.fasta";
     # get seq
-    runcmd("cat $seq_dir/$query.fasta > $temp/$job.tmp_query.fasta\n");
+    $cmd = "cat $seq_dir/$query.fasta > $temp/$job.tmp_query.fasta\n";
+    $LOG .= $cmd;
+    runcmd($cmd);
     
     # nucmer
-    runcmd("$MDPbin/MDP_nucmer --maxmatch -p $temp/$job.tmp $temp/$job.tmp_query.fasta $ref\n");
+    $cmd = "$MDPbin/MDP_nucmer --maxmatch -p $temp/$job.tmp $temp/$job.tmp_query.fasta $ref 2>&1\n";
+    $LOG .= $cmd;
+    $LOG .= `$cmd`;
     
     # deltas
-    runcmd("$MDPbin/MDP_delta-filter -m $temp/$job.tmp.delta > $temp/$job.tmp.m.delta\n");
-    runcmd("$MDPbin/MDP_delta-filter -r $temp/$job.tmp.delta > $temp/$job.tmp.r.delta\n");
+    $cmd = "$MDPbin/MDP_delta-filter -m $temp/$job.tmp.delta > $temp/$job.tmp.m.delta\n";
+    $LOG .= $cmd;
+    runcmd($cmd);
+    
+    $cmd = "$MDPbin/MDP_delta-filter -r $temp/$job.tmp.delta > $temp/$job.tmp.r.delta\n";
+    $LOG .= $cmd;
+    runcmd($cmd);
     
     # all-match coverage
-    push @LOG, "$MDPbin/MDP_show-coords -b -c $temp/$job.tmp.m.delta | grep -P \"\\s+\\d\" | awk '{ s+=\$10 } END { print s }'\n";
-    my $maxmatch = `$MDPbin/MDP_show-coords -b -c $temp/$job.tmp.m.delta | grep -P \"\\s+\\d\" | awk '{ s+=\$10 } END { print s }'`;
+    $cmd = "$MDPbin/MDP_show-coords -b -c $temp/$job.tmp.m.delta | grep -P \"\\s+\\d\" | awk '{ s+=\$10 } END { print s }'\n";
+    $LOG .= $cmd;
+    my $maxmatch = `$cmd`;
     $maxmatch =~ s/\s//g;
-    push @LOG, "MAXMATCH coverage = $maxmatch\n";
+    $LOG .= "MAXMATCH coverage = $maxmatch\n";
     
     # best-align coverage
-    push @LOG, "$MDPbin/MDP_show-coords -b -c $temp/$job.tmp.r.delta | grep -P \"\\s+\\d\" | awk '{ s+=\$10 } END { print s }'\n";
-    my $alignmatch = `$MDPbin/MDP_show-coords -b -c $temp/$job.tmp.r.delta | grep -P \"\\s+\\d\" | awk '{ s+=\$10 } END { print s }'`;
+    $cmd = "$MDPbin/MDP_show-coords -b -c $temp/$job.tmp.r.delta | grep -P \"\\s+\\d\" | awk '{ s+=\$10 } END { print s }'\n";
+    $LOG .= $cmd;
+    my $alignmatch = `$cmd`;
     $alignmatch =~ s/\s//g;
-    push @LOG, "BESTMATCH coverage = $alignmatch\n";
+    $LOG .= "BESTMATCH coverage = $alignmatch\n";
     
     my $a = "$maxmatch\t$alignmatch\t";
     
@@ -270,23 +315,36 @@ sub guess_assignment{
     if ( ($maxmatch >= $max_match_cutoff) && ($alignmatch >= $align_match_cutoff) ) {
         $purged{$query}=1;
         $a .= "r";
-        push @LOG, "\n### $query = repeat/assembly junk\n\n";
-        runcmd("$MDPbin/MDP_mummerplot --fat -p $dotcall/$query $temp/$job.tmp.m.delta") if (!($unknown_only));
+        $LOG .= "\n### $query = repeat/assembly junk\n\n";
+        
+        if (!($unknown_only)){
+            $cmd = "$MDPbin/MDP_mummerplot --fat -p $dotcall/$query $temp/$job.tmp.m.delta 2>&1\n";
+            $LOG .= $cmd;
+            $LOG .= `$cmd`;
+        }
         
     } elsif ($alignmatch >= $align_match_cutoff){
         $purged{$query}=1;
         $a .= "h";
-        push @LOG, "\n### $query = haplotig\n\n";
-        runcmd("$MDPbin/MDP_mummerplot --fat -p $dotcall/$query $temp/$job.tmp.m.delta") if (!($unknown_only));
+        $LOG .= "\n### $query = haplotig\n\n";
+        
+        if (!($unknown_only)){
+            $cmd = "$MDPbin/MDP_mummerplot --fat -p $dotcall/$query $temp/$job.tmp.m.delta 2>&1\n";
+            $LOG .= $cmd;
+            $LOG .= `$cmd`;
+        }
         
     } elsif ($maxmatch < $no_call_cutoff){
         $a .= "?";
-        push @LOG, "\n### $query = no call, insufficient seq homology to reference hits\n\n";
+        $LOG .= "\n### $query = no call, insufficient seq homology to reference hits\n\n";
     } else {
         $purged{$query}=1;
         $a .= "?";
-        push @LOG, "\n### $query = unsure, use your mk-I eyeballs\n\n";
-        runcmd("$MDPbin/MDP_mummerplot --fat -p $dotunk/$query $temp/$job.tmp.m.delta\n");
+        $LOG .= "\n### $query = unsure, use your mk-I eyeballs\n\n";
+        
+        $cmd = "$MDPbin/MDP_mummerplot --fat -p $dotunk/$query $temp/$job.tmp.m.delta 2>&1\n";
+        $LOG .= $cmd;
+        $LOG .= `$cmd`;
     }
     
     # clean-up
@@ -297,15 +355,11 @@ sub guess_assignment{
     );
     foreach my $file (@files_to_clean_up){
         if (-s $file){
-            push @LOG, "INFO: cleaning up $file\n";
+            $LOG .= "INFO: cleaning up $file\n";
             unlink $file;
         }
     }
-    $writing_to_out->down(1);
-    print STDERR @LOG;
-    $writing_to_out->up(1);
-    
-    return($a);
+    return($a, $LOG);
 }
 
 sub err {
@@ -315,6 +369,5 @@ sub err {
 
 
 sub runcmd {
-  print STDERR "RUNNING: @_";
   system(@_) == 0 or err("ERROR: Failed to run command: ", @_);
 }
