@@ -82,7 +82,6 @@ my $OUT;
 # global vars
 my %length; # $length{contig} = 2000000
 my %hits; # $hits{contig}{1} = contig; $hits{contig}{2} = anothercontig
-my %RBHs; # $RBHs{largercontig} = smallercontig
 my %purged; # $purged{contig} = 1
 
 my $MDPbin = "$Bin/../dotplot_maker/bin/";
@@ -130,19 +129,7 @@ foreach my $contig (keys(%hits)){
         err("ERROR: missing length in genome .fasta.fai index file for $contig\n");
     }
     
-    # find reciprocal best hits, this will only happen when both contigs were flagged as suspected haplotigs, which
-        # hopefully should be the case for most of the problematic contigs
-    if ( ($hits{$contig}{1}) && ($hits{$hits{$contig}{1}}{1}) ){
-        if ( $hits{$hits{$contig}{1}}{1} eq $contig ){
-            if ( $length{$contig} > $length{$hits{$contig}{1}} ){
-                $RBHs{$contig} = $hits{$contig}{1};
-            } else {
-                $RBHs{$hits{$contig}{1}} = $contig;
-            }
-        }
-    }
-    
-    # ignore if contig is larger that both its hit seqs (or one best hit if it only has one)
+    # ignore if contig is larger than both its hit seqs (or one best hit if it only has one)
     elsif ($hits{$contig}{2}) {
         if ( $length{$contig} > ($length{$hits{$contig}{1}} + $length{$hits{$contig}{2}}) ){
             $purged{$contig} = 1;
@@ -164,20 +151,13 @@ print $OUT "#example_crop3\tmatch1\tmatch2\t50.00\t50.00\tc\t250000\t750000\n";
 print $OUT "#note for reassign key: everything other than 'c', 'r', and 'h' will be ignored\n";
 print $OUT "#\n";
 print $OUT "#SUSPECT_CONTIG\tTOP_MATCH\tSECOND_MATCH\tMaxMatchCov\tBestMatchCov\tREASSGIN_KEY\tCROP_START\tCROP_END\n";
-print $OUT "#Reciprocal_best_hits\n";
 
-foreach my $contig (keys(%RBHs)){
-    $available_threads->down(1);
-    threads->create(\&RBH, $jobnumber, $contig);
-    $jobnumber++;
-}
-
-print $OUT "#Everything_else\n";
 foreach my $contig (sort(keys(%hits))){
     $available_threads->down(1);
-    threads->create(\&EE, $jobnumber, $contig);
+    threads->create(\&ASSIGN, $jobnumber, $contig);
     $jobnumber++;
 }
+
 
 # wait on remaining jobs
 while(){
@@ -195,45 +175,7 @@ exit(0);
 
 #---SUBROUTINES---
 
-sub RBH {
-    my $job = $_[0];
-    my $contig = $_[1];
-    my $cmd;
-    
-    my $LOG;
-    
-    if (!($purged{$RBHs{$contig}})){
-        # we assume the smaller contig is the haplotig
-        
-        $cmd = "cat $seq_dir/$hits{$RBHs{$contig}}{1}.fasta > $temp/$job.ref.fasta\n";
-        $LOG .= $cmd;
-        runcmd($cmd);
-        
-        if ($hits{$RBHs{$contig}}{2}){
-            
-            $cmd = "cat $seq_dir/$hits{$RBHs{$contig}}{2}.fasta >> $temp/$job.ref.fasta\n";
-            $LOG .= $cmd;
-            runcmd($cmd);
-            
-        }
-        my ($assign, $S_LOG) = guess_assignment($RBHs{$contig}, $job);
-        
-        $LOG .= $S_LOG;
-        
-        # print output
-        $writing_to_out->down(1);
-        print $OUT "$RBHs{$contig}\t$contig\t$hits{$RBHs{$contig}}{2}\t$assign\n";
-        # print log
-        print STDERR "$LOG\n###\n\n";
-        $writing_to_out->up(1);
-    }
-    
-    # exit
-    $available_threads->up(1);
-    threads->detach();
-}
-
-sub EE {
+sub ASSIGN {
     my $job = $_[0];
     my $contig = $_[1];
     my $cmd;
@@ -335,7 +277,7 @@ sub guess_assignment{
         }
         
     } elsif ($maxmatch < $no_call_cutoff){
-        $a .= "?";
+        $a .= "NO_REASSIGNMENT";
         $LOG .= "\n### $query = no call, insufficient seq homology to reference hits\n\n";
     } else {
         $purged{$query}=1;

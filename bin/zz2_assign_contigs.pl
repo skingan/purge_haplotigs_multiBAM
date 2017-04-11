@@ -19,26 +19,30 @@ my $unknown_only;
 my $script_dir = "$Bin/../scripts";
 my $temp_dir = "tmp_reassign_contigs";
 my $minced_dir = "tmp_reassign_contigs/minced_genome";
+my $outfile = "suspect_contig_reassign.tsv";
 
 
 #---HELP MSG---
 
 my $usage = "
 Usage:
-zz2_assign_contigs.pl  -s  stats.csv  -g  genome.fasta  [ -p -m -a ]
+zz2_assign_contigs.pl  -s  stats.csv  -g  genome.fasta  [ -o -p -m -a ]
 
 REQUIRED:
 -s      The stats .csv file output from zz1_analyze_genecov.pl
 -g      Genome .fasta (also need the samtools index genome.fasta.fai file)
 
 OPTIONAL:
--p      Threads to use for the blastn search. DEFAULT = $threads
+-o      Output file name for the reassignment .tsv file. 
+        DEFAULT = $outfile
+-p      Threads to use for the blastn search and mummer alignments.
+        DEFAULT = $threads
 -m      Maxmatch cutoff percentage. Used to determine if a contig is a 
         repetitive sequence. DEFAULT = $maxmatch_cutoff
 -a      Bestmatch cutoff percentage. Used to determine if a contig is a
         haplotig. DEFAULT = $bestmatch_cutoff
--u      Produce dotplots for unknown contigs only (dont produce them
-        for the auto-assigned contigs)
+-u      Produce dotplots for unknown contigs only. DEFAULT = produce
+        dotplots for both assigned and unassigned.
 ";
 
 #---PARSE ARGS---
@@ -143,14 +147,16 @@ if (!(-d $minced_dir)){
 
 
 # analyse the blastn output, gen dotplots for reciprocal best hits
-print STDERR "INFO: Starting analysis and assigning contigs, this may take a while, check $temp_dir/analyse_blastn.log and suspect_contig_reassign.tsv for progress\n";
+print STDERR "INFO: Starting analysis and assigning contigs, this may take a while, check $temp_dir/analyse_blastn.log and $outfile for progress\n";
 if ($unknown_only){
-    runcmd("$script_dir/analyze_blastn_output.pl -f $genome_fasta.fai -d $minced_dir -b $temp_dir/suspects.blastn.gz -t suspect_contig_reassign.tsv -m $maxmatch_cutoff -a $bestmatch_cutoff -u 1> $temp_dir/analyse_blastn.log 2>&1 \n");
+    runcmd("$script_dir/analyze_blastn_output.pl -f $genome_fasta.fai -d $minced_dir -b $temp_dir/suspects.blastn.gz -t $outfile -m $maxmatch_cutoff -a $bestmatch_cutoff -u 1> $temp_dir/analyse_blastn.log 2>&1 \n");
 } else {
-    runcmd("$script_dir/analyze_blastn_output.pl -f $genome_fasta.fai -d $minced_dir -b $temp_dir/suspects.blastn.gz -t suspect_contig_reassign.tsv -m $maxmatch_cutoff -a $bestmatch_cutoff 1> $temp_dir/analyse_blastn.log 2>&1 \n");
+    runcmd("$script_dir/analyze_blastn_output.pl -f $genome_fasta.fai -d $minced_dir -b $temp_dir/suspects.blastn.gz -t $outfile -m $maxmatch_cutoff -a $bestmatch_cutoff 1> $temp_dir/analyse_blastn.log 2>&1 \n");
 }
 
 
+# done
+print STDERR "\nINFO: Contig assignment completed successfully!\n\n";
 
 
 #---SUBROUTINES---
