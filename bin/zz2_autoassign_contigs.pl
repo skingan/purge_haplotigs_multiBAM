@@ -24,6 +24,8 @@ my $temp_dir = "tmp_reassign_contigs";
 my $minced_dir = "tmp_reassign_contigs/minced_genome";
 my $outfile = "suspect_contig_reassign.tsv";
 my $curated = "curated";
+my @haplotig_files;
+my @artefact_files;
 
 #---HELP MSG---
 
@@ -221,6 +223,8 @@ sub analyse_blastn {
 sub reassign_contigs {
     runcmd("$Bin/zz3_reassign_contigs.pl -t suspect_contig_reassign.tsv -g $genome_fasta -o 0$current_pass");
     runcmd("samtools faidx 0$current_pass.fasta");
+    push @haplotig_files, "0$current_pass.haplotigs.fasta";
+    push @artefact_files, "0$current_pass.artefacts.fasta";
 }
 
 sub reset_purging {
@@ -234,18 +238,26 @@ sub reset_purging {
             runcmd("rm -rf $dir");
         }
     }
-    my $prev = $current_pass - 1;
-    if ($current_pass > 1){
-        runcmd("cat 0$prev.haplotigs.fasta >> 0$current_pass.haplotigs.fasta");
-        runcmd("cat 0$prev.artefacts.fasta >> 0$current_pass.artefacts.fasta");
-    }
 }
 
 sub rename_output {
     runcmd("mv 0$current_pass.fasta $curated.fasta");
     runcmd("mv 0$current_pass.fasta.fai $curated.fasta.fai");
-    runcmd("mv 0$current_pass.haplotigs.fasta $curated.haplotigs.fasta");
-    runcmd("mv 0$current_pass.artefacts.fasta $curated.artecats.fasta");
+    my $hf = "$curated.haplotigs.fasta";
+    my $af = "$curated.artefacts.fasta";
+    
+    if (-s $hf){
+        unlink $hf;
+    }
+    foreach my $file (@haplotig_files){
+        runcmd("cat $file >> $hf");
+    }
+    if (-s $af){
+        unlink $af;
+    }
+    foreach my $file (@artefact_files){
+        runcmd("cat $file >> $af");
+    }
 }
 
 #---UTILITY SUBROUTINES---
