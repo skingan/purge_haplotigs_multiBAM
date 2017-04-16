@@ -62,7 +62,7 @@ Index your genome.fasta file with samtools faidx if not already done.
 
 #### STEP 1
 
-Generate a coverage histogram (either by running the first script or using your favourite method)
+Generate a coverage histogram by running the first script. You will also need the bedtools genecov output file for STEP 2.
 
 ```
 #!text
@@ -77,18 +77,20 @@ eyeball the histogram, you should have two peaks, one for haploid level of cover
 
 #### STEP 2
 
-Run the second script to analyse the coverage on a contig by contig basis--produces a contig `stats.csv` file with flagged contigs for further analysis
+Run the second script to analyse the coverage on a contig by contig basis--produces a contig `coverage_stats.csv` file with flagged contigs for further analysis.
 
 ```
 #!text
-zz1_analyse_gencov.pl  -i genecov.out  -o stats.csv  -l 30  -m 80  -h 145  [ -j 80  -s 80 ]
+zz1_analyse_gencov.pl  -i genecov.out  -o coverage_stats.csv  -l 30  -m 80  -h 145  [ -j 80  -s 80 ]
 
--i      The output of bedtools genomecov
+REQUIRED:
+-i      The output of bedtools genomecov from STEP 1
 -o      Output file name (csv format)
 -l      The read depth low cutoff (use the histogram to eyeball these cutoffs)
 -h      The read depth high cutoff
 -m      The low point between the haploid and diploid peaks
 
+OPTIONAL:
 -j      Flag contig as "j" (junk) if this percentage or greater of the contig is 
             low/high coverage (default=80)
 -s      Flag contig as "s" (suspected haplotig) if this percentage or more of the
@@ -98,16 +100,48 @@ zz1_analyse_gencov.pl  -i genecov.out  -o stats.csv  -l 30  -m 80  -h 145  [ -j 
 
 #### STEP 3
 
-Run the third script to guess the assignment of the flagged contigs (produces `suspect_contig_reassign.tsv` )
+Run the purging pipeline. This script will automatically run a number of steps to identify contig matches for 'suspect' contigs, perform mummer alignments, and will attempt to guess the assignment for 'suspect' contigs. It will rerun these steps a number of times in order to reach a convergence for reassigning haplotigs.
 
 ```
 #!text
-zz2_assign_contigs.sh  stats.csv  genome.fasta
+zz2_autoassign_contigs.pl  -s  coverage_stats.csv  -g  genome.fasta
+
+REQUIRED:
+-s      The coverage stats .csv file output from STEP 2
+-g      The input assembly genome .fasta file (also needs the samtools index genome.fasta.fai file)
+
+OPTIONAL:
+-o      Output file name for the reassignment .tsv file. 
+        DEFAULT = "suspect_contig_reassign.tsv"
+-t      Threads to use for the blastn search and mummer alignments.
+        DEFAULT = 4
+-p      Max number of passes to perform, DEFAULT = 3. More than one purging
+        pass is usually needed due to multiple overlapping haplotigs and repeat contigs.
+-c      Prefix for the curated assembly, DEFAULT = "curated"
+
+-m      Maxmatch cutoff percentage. Used to determine if a contig is a 
+        repetitive sequence. DEFAULT = 250
+-a      Bestmatch cutoff percentage. Used to determine if a contig is a
+        haplotig. DEFAULT = 75
+
+-u      Produce dotplots for unknown contigs only. DEFAULT is to produce
+        dotplots for both assigned and unassigned.
 ```
 
-#### OPTIONAL MANUAL STEP
+### ALL DONE! 
 
-Go through `suspect_contig_reassign.tsv`, look at the corresponding dotplots for each unknown contig, and make your own assessment. Modify `suspect_contig_reassign.tsv` by hand. Otherwise the next step will reassign the automatically identified contigs only.
+You will have three files:
+
+- <prefix>.fasta: These are the curated primary contigs
+- <prefix>.haplotigs.fasta: These are all the haplotigs identified in the initial input assembly.
+- <prefix>.artefacts.fasta: These are the low/high coverage contigs identified in STEP 2; most likely repeats and other assembly artefacts.
+
+You can do some further reassigning by hand if you wish, see the steps below.
+
+
+#### OPTIONAL MANUAL STEP - FURTHER CURATION
+
+Go through `suspect_contig_reassign.tsv`, look at the corresponding dotplots for each unknown contig, and make your own assessment. Modify `suspect_contig_reassign.tsv` by hand by adding or changing reassignment keys.
 
 ```
 #!text
@@ -130,9 +164,9 @@ contig4            hit1       hit2          50.00            50.00             c
 
 [Example: x-axis contig is collapsed repeat/assembly junk](https://bitbucket.org/mroachawri/purge_haplotigs/src/cf363f94c00fd865891a0469675d6df4a0813820/examples/example_repetitive_junk_contig.png)
 
-#### STEP 4
+#### OPTIONAL - STEP 4
 
-Run the fourth script to create your new, cleaner assembly
+Run the fourth script to re-create your manually-reassigned curated assembly.
 
 ```
 #!text
@@ -143,20 +177,11 @@ zz3_reassign_contigs.pl  -t suspect_contig_reassign.tsv  -g genome.fasta  -o out
                     reviewing the dotplot files, or unedited and using the auto-
                     assignments).
 
--g/genome           The original genome .fasta (primary contigs from FALCON/FALCON-unzip).
+-g/genome           The curated assembly from STEP 3; NOT the original input assembly.
 
 -o/output_prefix    Prefix for the output files. The following files will be created: 
                     <prefix>.fasta              - new primary contig assembly
                     <prefix>.haplotigs.fasta    - primary contigs reassigned as haplotigs
                     <prefix>.artefacts.fasta    - repeats and junk, probably not useful
-
--force              Force reassignment (if contig is flagged for reassigning but is also
-                    a reference for flagging another contig) off=script will try to 
-                    determine which to keep.
-
-
 ```
 #### DONE
-
-You can concatenate the reassigned <prefix>.haplotigs.fasta to your original haplotigs
-file after this step (for instance if you've used FALCON-unzip).
