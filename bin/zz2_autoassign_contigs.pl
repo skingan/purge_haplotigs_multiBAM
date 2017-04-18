@@ -26,6 +26,7 @@ my $outfile = "suspect_contig_reassign.tsv";
 my $curated = "curated";
 my @haplotig_files;
 my @artefact_files;
+my %ignore;
 
 #---HELP MSG---
 
@@ -54,6 +55,10 @@ OPTIONAL:
 -u      Produce dotplots for unknown contigs only. DEFAULT = produce
         dotplots for both assigned and unassigned.
 ";
+
+
+msg("Starting pipeline using command:\n$0 @ARGV\n");
+
 
 #---PARSE ARGS---
 
@@ -99,11 +104,14 @@ suspects_and_junk();
 
 mince_genome();
 
+
 #---PIPELINE---
 
 PURGE: while(1){
     
     msg("\n\n#####\n\nPerforming purging pass $current_pass\n\n#####\n\n");
+    
+    refine_suspects();
     
     blastn_db();
     
@@ -114,12 +122,12 @@ PURGE: while(1){
     reassign_contigs();
     
     my $prev = $genome_fasta;
-    $genome_fasta = "0$current_pass.fasta";
+    $genome_fasta = "pass_$current_pass.fasta";
     
     my @sp = stat $prev;
-    my @sc = stat "0$current_pass.fasta";
+    my @sc = stat "pass_$current_pass.fasta";
     
-    if ( ($current_pass >= $passes) || ($sp[7] == $sc[7]) ){
+    if ( ($current_pass == $passes) || ($sp[7] == $sc[7]) ){
         last PURGE;
     } else {
         reset_purging();
@@ -192,6 +200,35 @@ sub blastn_db {
     }
 }
 
+sub refine_suspects {
+    if ($current_pass > 1){
+        # get the contigs flagged for 'no_reassignment' due to poor seq homology
+        open(my $OF, "$outfile") or err("Failed to open $outfile for reading");
+        while(<$OF>){
+            if ($_ =~ /NO_REASSIGNMENT/){
+                my @line = split(/\s+/, $_);
+                $ignore{$line[0]}=1;
+            }
+        }
+        close($OF);
+        # remake the suspects.list to remove 'no_reassignment' contigs to improve speed with subsequent passes
+        my @clean_suspects;
+        open(my $SL, "$temp_dir/suspects.list") or err("Failed to open $temp_dir/suspects.list for reading");
+        while(<$SL>){
+            $_ =~ s/\s//g;
+            if (!($ignore{$_})){
+                push @clean_suspects, $_;
+            }
+        }
+        close($SL);
+        open($SL, ">", "$temp_dir/suspects.list") or err("Failed to open $temp_dir/suspects.list for writing");
+        (print $SL "$_\n") foreach(@clean_suspects);
+        close($SL);
+        undef @clean_suspects;
+        undef %ignore;
+    }
+}
+
 sub suspects_blastn {
     # do the suspects v all blastn
     if (!(-s "$temp_dir/suspects.blastn.gz")){
@@ -221,14 +258,14 @@ sub analyse_blastn {
 }
 
 sub reassign_contigs {
-    runcmd("$Bin/zz3_reassign_contigs.pl -t suspect_contig_reassign.tsv -g $genome_fasta -o 0$current_pass");
-    runcmd("samtools faidx 0$current_pass.fasta");
-    push @haplotig_files, "0$current_pass.haplotigs.fasta";
-    push @artefact_files, "0$current_pass.artefacts.fasta";
+    runcmd("$Bin/zz3_reassign_contigs.pl -t suspect_contig_reassign.tsv -g $genome_fasta -o pass_$current_pass");
+    runcmd("samtools faidx pass_$current_pass.fasta");
+    push @haplotig_files, "pass_$current_pass.haplotigs.fasta";
+    push @artefact_files, "pass_$current_pass.artefacts.fasta";
 }
 
 sub reset_purging {
-    foreach my $file ($outfile, "$temp_dir/suspects.blastn.gz", "$temp_dir/analyse_blastn.log"){
+    foreach my $file ("$temp_dir/suspects.blastn.gz", "$temp_dir/analyse_blastn.log"){
         msg("Cleaning up temp file $file");
         unlink $file or err("Failed to clean up temp file");
     }
@@ -241,8 +278,8 @@ sub reset_purging {
 }
 
 sub rename_output {
-    runcmd("mv 0$current_pass.fasta $curated.fasta");
-    runcmd("mv 0$current_pass.fasta.fai $curated.fasta.fai");
+    runcmd("mv pass_$current_pass.fasta $curated.fasta");
+    runcmd("mv pass_$current_pass.fasta.fai $curated.fasta.fai");
     my $hf = "$curated.haplotigs.fasta";
     my $af = "$curated.artefacts.fasta";
     

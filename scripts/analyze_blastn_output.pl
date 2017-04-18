@@ -276,7 +276,7 @@ sub guess_assignment{
             $LOG .= `$cmd`;
         }
         
-    } elsif ($maxmatch < $no_call_cutoff){
+    } elsif ($alignmatch < $no_call_cutoff){
         $a .= "NO_REASSIGNMENT";
         $LOG .= "\n### $query = no call, insufficient seq homology to reference hits\n\n";
     } else {
