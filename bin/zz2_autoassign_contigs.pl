@@ -68,6 +68,7 @@ GetOptions(
     "threads=i" => \$threads,
     "passes=i" => \$passes,
     "curated=s" => \$curated,
+    "outfile=s" => \$outfile,
     "maxmatch=i" => \$maxmatch_cutoff,
     "allmatch=i" => \$bestmatch_cutoff,
     "unknown" => \$unknown_only
@@ -251,14 +252,14 @@ sub analyse_blastn {
     # analyse the blastn output, gen dotplots for reciprocal best hits
     msg("Starting analysis and assigning contigs, this may take a while, check $temp_dir/analyse_blastn.log and $outfile for progress");
     if ($unknown_only){
-        runcmd("$script_dir/analyze_blastn_output.pl -f $genome_fasta.fai -d $minced_dir -b $temp_dir/suspects.blastn.gz -t $outfile -m $maxmatch_cutoff -a $bestmatch_cutoff -u 1> $temp_dir/analyse_blastn.log 2>&1");
+        runcmd("$script_dir/analyze_blastn_output.pl -f $genome_fasta.fai -d $minced_dir -b $temp_dir/suspects.blastn.gz -t $outfile -m $maxmatch_cutoff -a $bestmatch_cutoff -u -p $threads 1> $temp_dir/analyse_blastn.log 2>&1");
     } else {
-        runcmd("$script_dir/analyze_blastn_output.pl -f $genome_fasta.fai -d $minced_dir -b $temp_dir/suspects.blastn.gz -t $outfile -m $maxmatch_cutoff -a $bestmatch_cutoff 1> $temp_dir/analyse_blastn.log 2>&1");
+        runcmd("$script_dir/analyze_blastn_output.pl -f $genome_fasta.fai -d $minced_dir -b $temp_dir/suspects.blastn.gz -t $outfile -m $maxmatch_cutoff -a $bestmatch_cutoff -p $threads 1> $temp_dir/analyse_blastn.log 2>&1");
     }
 }
 
 sub reassign_contigs {
-    runcmd("$Bin/zz3_reassign_contigs.pl -t suspect_contig_reassign.tsv -g $genome_fasta -o pass_$current_pass");
+    runcmd("$Bin/zz3_reassign_contigs.pl -t $outfile -g $genome_fasta -o pass_$current_pass");
     runcmd("samtools faidx pass_$current_pass.fasta");
     push @haplotig_files, "pass_$current_pass.haplotigs.fasta";
     push @artefact_files, "pass_$current_pass.artefacts.fasta";
@@ -269,7 +270,7 @@ sub reset_purging {
         msg("Cleaning up temp file $file");
         unlink $file or err("Failed to clean up temp file");
     }
-    foreach my $dir ("$temp_dir/blstdb", "dotplots_assigned", "dotplots_unknowns"){
+    foreach my $dir ("$temp_dir/blstdb", "dotplots_unknowns"){
         if (-d $dir){
             msg("Cleaning up directory $dir");
             runcmd("rm -rf $dir");

@@ -160,13 +160,8 @@ foreach my $contig (sort(keys(%hits))){
 
 
 # wait on remaining jobs
-while(){
-    if (threads->list()){
-        sleep 0.5;
-    } else {
-        last;
-    }
-}
+sleep 1 while threads->list();
+
 
 close($OUT);
 
@@ -193,18 +188,18 @@ sub ASSIGN {
             $cmd = "cat $seq_dir/$hits{$contig}{2}.fasta >> $temp/$job.ref.fasta\n";
             $LOG .= $cmd;
             runcmd($cmd);
-            
-            my ($assign, $S_LOG) = guess_assignment($contig, $job);
-            
-            $LOG .= $S_LOG;
-            
-            # print output
-            $writing_to_out->down(1);
-            print $OUT "$contig\t$hits{$contig}{1}\t$hits{$contig}{2}\t$assign\n";
-            # print log
-            print STDERR "$LOG\n###\n\n";
-            $writing_to_out->up(1);
         }
+        
+        my ($assign, $S_LOG) = guess_assignment($contig, $job);
+        
+        $LOG .= $S_LOG;
+        
+        # print output
+        $writing_to_out->down(1);
+        print $OUT "$contig\t$hits{$contig}{1}\t$hits{$contig}{2}\t$assign\n";
+        # print log
+        print STDERR "$LOG\n###\n\n";
+        $writing_to_out->up(1);
     }
     # exit
     $available_threads->up(1);
@@ -260,9 +255,9 @@ sub guess_assignment{
         $LOG .= "\n### $query = repeat/assembly junk\n\n";
         
         if (!($unknown_only)){
-            $cmd = "$MDPbin/MDP_mummerplot --fat -p $dotcall/$query $temp/$job.tmp.m.delta 2>&1\n";
+            $cmd = "$MDPbin/MDP_mummerplot --fat -p $dotcall/$query $temp/$job.tmp.m.delta 2>&1 > /dev/null\n";
             $LOG .= $cmd;
-            $LOG .= `$cmd`;
+            runcmd($cmd);
         }
         
     } elsif ($alignmatch >= $align_match_cutoff){
@@ -271,9 +266,9 @@ sub guess_assignment{
         $LOG .= "\n### $query = haplotig\n\n";
         
         if (!($unknown_only)){
-            $cmd = "$MDPbin/MDP_mummerplot --fat -p $dotcall/$query $temp/$job.tmp.m.delta 2>&1\n";
+            $cmd = "$MDPbin/MDP_mummerplot --fat -p $dotcall/$query $temp/$job.tmp.m.delta 2>&1 > /dev/null\n";
             $LOG .= $cmd;
-            $LOG .= `$cmd`;
+            runcmd($cmd);
         }
         
     } elsif ($alignmatch < $no_call_cutoff){
@@ -284,23 +279,25 @@ sub guess_assignment{
         $a .= "?";
         $LOG .= "\n### $query = unsure, use your mk-I eyeballs\n\n";
         
-        $cmd = "$MDPbin/MDP_mummerplot --fat -p $dotunk/$query $temp/$job.tmp.m.delta 2>&1\n";
+        $cmd = "$MDPbin/MDP_mummerplot --fat -p $dotunk/$query $temp/$job.tmp.m.delta 2>&1 > /dev/null\n";
         $LOG .= $cmd;
-        $LOG .= `$cmd`;
+        runcmd($cmd);
     }
     
     # clean-up
     my @files_to_clean_up = (
         "$dotcall/$query.filter", "$dotcall/$query.fplot", "$dotcall/$query.rplot", "$dotcall/$query.gp",
         "$dotunk/$query.filter", "$dotunk/$query.fplot", "$dotunk/$query.rplot", "$dotunk/$query.gp",
-        "$temp/$job.tmp_query.fasta", "$temp/$job.tmp.delta", "$temp/$job.tmp.m.delta", "$temp/$job.tmp.r.delta", "$temp/$job.ref.fasta"
+        "$temp/$job.tmp_query.fasta", "$temp/$job.tmp.delta", "$temp/$job.tmp.m.delta", "$temp/$job.tmp.r.delta", $ref
     );
+    
     foreach my $file (@files_to_clean_up){
         if (-s $file){
             $LOG .= "INFO: cleaning up $file\n";
             unlink $file;
         }
     }
+    
     return($a, $LOG);
 }
 

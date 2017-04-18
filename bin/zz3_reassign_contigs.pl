@@ -197,9 +197,11 @@ sub pick_best_reference{
          (($table{$contig}{"A"} eq "c") && ($table{$m_ctg}{"A"} eq "c")) ){
         if ($contig_length{$contig} < $contig_length{$m_ctg}){
             $table{$m_ctg}{"A"} = "?";
+            unlink "dotplots_assigned/$m_ctg.png";
             print STDERR "INFO:    keeping $m_ctg, reassigning $contig\n";
         } else {
             $table{$contig}{"A"} = "?";
+            unlink "dotplots_assigned/$contig.png";
             print STDERR "INFO:    keeping $contig, reassigning $m_ctg\n";
         }
     }
@@ -210,9 +212,11 @@ sub pick_best_reference{
             ( ($table{$contig}{"A"} eq "r")    && ($table{$m_ctg}{"A"} =~ /[hc]/) ) ){
         if ($table{$contig}{"A"} =~ /[hc]/){
             $table{$contig}{"A"} = "?";
+            unlink "dotplots_assigned/$contig.png";
             print STDERR "INFO:    keeping $contig, reassigning $m_ctg\n";
         } else {
             $table{$m_ctg}{"A"} = "?";
+            unlink "dotplots_assigned/$m_ctg.png";
             print STDERR "INFO:    keeping $m_ctg, reassigning $contig\n";
         }
     }
@@ -223,9 +227,11 @@ sub pick_best_reference{
             ( ($table{$contig}{"A"} eq "c") && ($table{$m_ctg}{"A"} eq "h") ) ){
         if ($table{$contig}{"A"} eq "c"){
             $table{$contig}{"A"} = "?";
+            unlink "dotplots_assigned/$contig.png";
             print STDERR "INFO:    keeping $contig, reassigning $m_ctg\n";
         } else {
             $table{$m_ctg}{"A"} = "?";
+            unlink "dotplots_assigned/$m_ctg.png";
             print STDERR "INFO:    keeping $m_ctg, reassigning $contig\n";
         }
     }
@@ -235,9 +241,11 @@ sub pick_best_reference{
     elsif ( ($table{$contig}{"A"} eq "r") && ($table{$m_ctg}{"A"} eq "r") ){
         if ($contig_length{$contig} < $contig_length{$m_ctg}){
             $table{$m_ctg}{"A"} = "?";
+            unlink "dotplots_assigned/$m_ctg.png";
             print STDERR "INFO:    keeping $m_ctg, reassigning $contig\n";
         } else {
             $table{$contig}{"A"} = "?";
+            unlink "dotplots_assigned/$contig.png";
             print STDERR "INFO:    keeping $contig, reassigning $m_ctg\n";
         }
     }
