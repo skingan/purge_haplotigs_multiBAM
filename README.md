@@ -18,6 +18,7 @@ Identify primary contigs that are haplotigs of other primary contigs, and move t
 - perl 
 - blast (blastn and makeblastdb)
 - make (for mummer)
+- gnu parallel (optional but recommended)
 
 
 ## Install

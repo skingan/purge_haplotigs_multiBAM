@@ -89,6 +89,13 @@ if ($blastn eq ""){
     $check_die = 1;
 }
 
+my $gnuparallel = `parallel --help`;
+if ($gnuparallel eq ""){
+    $gnuparallel = 0;
+} else {
+    $gnuparallel = 1;
+}
+
 # TODO check scripts and mummer
 
 check_files($stats_csv, $genome_fasta);
@@ -241,7 +248,11 @@ sub suspects_blastn {
         } else {
             msg("suspects.fasta found, skipping");
         }
-        runcmd("blastn -query $temp_dir/suspects.fasta -db $temp_dir/blstdb/$genome_fasta -outfmt 6 -num_alignments 3 -evalue 0.0000001 -num_threads $threads |  awk ' \$1 != \$2 && \$4 > 500 { print } ' | gzip - > $temp_dir/suspects.blastn.gz");
+        if ($gnuparallel){
+            runcmd("cat $temp_dir/suspects.fasta | parallel --no-notice -j $threads --block 100k --recstart '>' --pipe blastn -db $temp_dir/blstdb/$genome_fasta -outfmt 6 -evalue 0.000000000001 -max_target_seqs 3 -max_hsps 1000 -word_size 28 -culling_limit 10 -query - | awk ' \$1 != \$2 && \$4 > 1000 { print } ' | gzip - > $temp_dir/suspects.blastn.gz");
+        } else {
+            runcmd("blastn -query $temp_dir/suspects.fasta -db $temp_dir/blstdb/$genome_fasta -outfmt 6 -evalue 0.000000000001 -num_threads $threads -max_target_seqs 3 -max_hsps 1000 -word_size 28 -culling_limit 10 |  awk ' \$1 != \$2 && \$4 > 1000 { print } ' | gzip - > $temp_dir/suspects.blastn.gz");
+        }
         unlink "$temp_dir/suspects.fasta";
     } else {
         msg("suspects.blastn.gz found, skipping");
