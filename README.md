@@ -131,11 +131,13 @@ OPTIONAL:
 
 ### ALL DONE! 
 
-You will have three files:
+You will have five files:
 
-- <prefix>.fasta: These are the curated primary contigs
-- <prefix>.haplotigs.fasta: These are all the haplotigs identified in the initial input assembly.
-- <prefix>.artefacts.fasta: These are the low/high coverage contigs identified in STEP 2; most likely repeats and other assembly artefacts.
+- **<prefix>.fasta**: These are the curated primary contigs
+- **<prefix>.haplotigs.fasta**: These are all the haplotigs identified in the initial input assembly. 
+- **<prefix>.artefacts.fasta**: These are the low/high coverage contigs (identified in STEP 2), and the repetitive contigs. 
+- **<prefix>.reassignments.tsv**: These are all the reassignments that were made.
+- **<prefix>.reassignment_paths.log**: This shows the contig association "paths", derived from the contig reassignments.
 
 You can do some further reassigning by hand if you wish, see the steps below.
 
