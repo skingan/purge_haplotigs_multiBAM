@@ -101,7 +101,7 @@ sub find_path {
         print $OUT "\n";
     } else {
         foreach my $ctg (@{$ref{$ref_ctg}}){
-            push @current_path, " -> $ctg,$list{$ctg}{a}";
+            push @current_path, " <- $ctg,$list{$ctg}{a}";
             $current_depth += 1;
             
             find_path($ctg);
@@ -111,6 +111,7 @@ sub find_path {
             for (my $i=0; $i<=$current_depth; $i++){
                 $current_path[$i] =~ s/./ /g;
             }
+            $current_path[$current_depth] =~ s/ $/|/;
         }
     }
 }
