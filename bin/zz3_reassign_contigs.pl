@@ -6,7 +6,7 @@ use Getopt::Long;
 
 my $usage = "
 Usage:
-reassign_contigs.pl  -t contig_table.tsv  -g genome.fasta  -o output_prefix
+zz3_reassign_contigs.pl  -t suspect_contig_reassign.tsv  -g genome.fasta  -o output_prefix
 
 -t/table            The output .tsv file from previous step (either manually edited after
                     reviewing the dotplot files, or unedited and using the auto-
@@ -17,6 +17,8 @@ reassign_contigs.pl  -t contig_table.tsv  -g genome.fasta  -o output_prefix
                     <prefix>.haplotigs.fasta    - primary contigs reassigned as haplotigs
                     <prefix>.artefacts.fasta    - repeats and very low/high coverage, 
                                                   contigs, probably not useful
+                    <prefix>.reassignments.tsv  - log of the reassignments that were made
+
 -force              Force reassignment (if contig is flagged for reassigning but is also
                     a reference for flagging another contig) off=script will try to 
                     determine which to keep.
@@ -47,6 +49,7 @@ if ( !($table) || !($genome) || !($outprefix) ){
 my $OG;
 my $OH;
 my $OA;
+my $OL;
 my $IT;
 my $IG;
 my $JL;
@@ -56,6 +59,7 @@ my $FF;
 my $outG = "$outprefix.fasta";
 my $outH = "$outprefix.haplotigs.fasta";
 my $outA = "$outprefix.artefacts.fasta";
+my $outL = "$outprefix.reassignments.tsv";
 
 # global variables
 my %table;      # $table{"contig"}{1} = "contig-id"        top 2 hits for contig
@@ -90,7 +94,10 @@ open($FF, $fastafai) or die "failed to open $fastafai for reading\n";
 open($OG, ">$outG") or die "failed to open $outG for writing\n";
 open($OH, ">$outH") or die "failed to open $outH for writing\n";
 open($OA, ">$outA") or die "failed to open $outA for writing\n";
+open($OL, ">$outL") or die "failed to open $outL for writing\n";
 
+# init log file
+print $OL "#reassigned_contig\treference_contig\treassignment\tbest-match-coverage\tmax-match-coverage\n";
 
 # read in the list of junk contigs
 ($_ =~ s/\s//g, $junkcontigs{$_} = 1) while(<$JL>);
@@ -136,6 +143,13 @@ while(<$IT>){
 }
 close($IT);
 
+# remove any reassignments based on low/high coverage contigs flagged for removal
+foreach my $contig (@contigs_for_reassigning){
+    if ( ($table{$contig}{"A"} =~ /[hrc]/) && ($junkcontigs{$table{$contig}{1}}) ){
+        $table{$contig}{"A"} = "?";
+    }
+}
+
 # identify if any reassigned contigs are references for reassignment - looking at best hits only
 foreach my $contig (@contigs_for_reassigning){
     if ($table{$table{$contig}{1}}){
@@ -164,7 +178,8 @@ ITR: while(<$IG>){
         }
         # print to junk fasta if junk contig, otherwise process seq
         if ($junkcontigs{$current_contig}){
-            print_seq($OA, "$current_contig\_REPEAT/JUNK", $current_seq);
+            print_seq($OA, "$current_contig\_LOW/HIGH_COVERAGE", $current_seq);
+            print $OL "$current_contig\tNA\tLOW/HIGH_COVERAGE_ARTEFACT\tNA\tNA\n";
         } else {        
             write_current_seq();
         }
@@ -259,10 +274,12 @@ sub write_current_seq{
     if ($table{$current_contig}{"A"}){
         if ($table{$current_contig}{"A"} eq "r"){
             # print to junk file
-            print_seq($OA, "$current_contig\_REPEAT/JUNK", $current_seq);
+            print_seq($OA, "$current_contig\_REPEAT", $current_seq);
+            print $OL "$current_contig\t$table{$current_contig}{1}\tREPEAT\t$table{$current_contig}{B}\t$table{$current_contig}{M}\n";
         } elsif ($table{$current_contig}{"A"} eq "h"){
             # print to haplotig file
-            print_seq($OH, "$current_contig\_HAPLOTIG", $current_seq);
+            print_seq($OH, "$current_contig\_HAPLOTIG-of-$table{$current_contig}{1}", $current_seq);
+            print $OL "$current_contig\t$table{$current_contig}{1}\tHAPLOTIG\t$table{$current_contig}{B}\t$table{$current_contig}{M}\n";
         } elsif ($table{$current_contig}{"A"} eq "c"){
             # crop and print to genome/haplotig
             crop_and_print();
@@ -305,6 +322,8 @@ sub crop_and_print{
     if ($cropstart > $cropstop){
         err("ERROR: crop start position greater than crop stop position\n$current_contig\n");
     }
+    
+    print $OL "$current_contig\t$table{$current_contig}{1}\tCROP\n";
     
     # cut and print the seqs
         # middle crop

@@ -12,6 +12,7 @@ use Time::Piece;
 my $threads = 4;
 my $maxmatch_cutoff = 250;
 my $bestmatch_cutoff = 75;
+my $low_cutoff = 40;
 my $passes = 3;
 
 my $stats_csv;
@@ -26,6 +27,7 @@ my $outfile = "suspect_contig_reassign.tsv";
 my $curated = "curated";
 my @haplotig_files;
 my @artefact_files;
+my @reassignment_logs;
 my %ignore;
 
 #---HELP MSG---
@@ -249,9 +251,9 @@ sub suspects_blastn {
             msg("suspects.fasta found, skipping");
         }
         if ($gnuparallel){
-            runcmd("cat $temp_dir/suspects.fasta | parallel --no-notice -j $threads --block 100k --recstart '>' --pipe blastn -db $temp_dir/blstdb/$genome_fasta -outfmt 6 -evalue 0.000000000001 -max_target_seqs 3 -max_hsps 1000 -word_size 28 -culling_limit 10 -query - | awk ' \$1 != \$2 && \$4 > 1000 { print } ' | gzip - > $temp_dir/suspects.blastn.gz");
+            runcmd("cat $temp_dir/suspects.fasta | parallel --no-notice -j $threads --block 100k --recstart '>' --pipe blastn -db $temp_dir/blstdb/$genome_fasta -outfmt 6 -evalue 0.000000000001 -max_target_seqs 3 -max_hsps 1000 -word_size 28 -culling_limit 10 -query - | awk ' \$1 != \$2 && \$4 > 500 { print } ' | gzip - > $temp_dir/suspects.blastn.gz");
         } else {
-            runcmd("blastn -query $temp_dir/suspects.fasta -db $temp_dir/blstdb/$genome_fasta -outfmt 6 -evalue 0.000000000001 -num_threads $threads -max_target_seqs 3 -max_hsps 1000 -word_size 28 -culling_limit 10 |  awk ' \$1 != \$2 && \$4 > 1000 { print } ' | gzip - > $temp_dir/suspects.blastn.gz");
+            runcmd("blastn -query $temp_dir/suspects.fasta -db $temp_dir/blstdb/$genome_fasta -outfmt 6 -evalue 0.000000000001 -num_threads $threads -max_target_seqs 3 -max_hsps 1000 -word_size 28 -culling_limit 10 |  awk ' \$1 != \$2 && \$4 > 500 { print } ' | gzip - > $temp_dir/suspects.blastn.gz");
         }
         unlink "$temp_dir/suspects.fasta";
     } else {
@@ -274,9 +276,11 @@ sub reassign_contigs {
     runcmd("samtools faidx pass_$current_pass.fasta");
     push @haplotig_files, "pass_$current_pass.haplotigs.fasta";
     push @artefact_files, "pass_$current_pass.artefacts.fasta";
+    push @reassignment_logs, "pass_$current_pass.reassignments.tsv";
 }
 
 sub reset_purging {
+    runcmd("cp $outfile pass_$current_pass.$outfile");
     foreach my $file ("$temp_dir/suspects.blastn.gz", "$temp_dir/analyse_blastn.log"){
         msg("Cleaning up temp file $file");
         unlink $file or err("Failed to clean up temp file");
@@ -294,6 +298,7 @@ sub rename_output {
     runcmd("mv pass_$current_pass.fasta.fai $curated.fasta.fai");
     my $hf = "$curated.haplotigs.fasta";
     my $af = "$curated.artefacts.fasta";
+    my $al = "$curated.reassignments.tsv";
     
     if (-s $hf){
         unlink $hf;
@@ -307,6 +312,15 @@ sub rename_output {
     foreach my $file (@artefact_files){
         runcmd("cat $file >> $af");
     }
+    if (-s $al){
+        unlink $al;
+    }
+    foreach my $file (@reassignment_logs){
+        runcmd("cat $file >> $al");
+    }
+    
+    # get the contig association paths for the reassigned contigs
+    runcmd("$script_dir/get_reassignment_paths.pl -i $al -o $curated.reassignment_paths.log");
 }
 
 #---UTILITY SUBROUTINES---

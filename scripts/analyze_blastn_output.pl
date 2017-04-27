@@ -17,7 +17,7 @@ my $unknown_only;
 my $max_match_cutoff = 250;
 my $align_match_cutoff = 75;
 my $threads = 4;
-my $no_call_cutoff = 20;
+my $no_call_cutoff = 40;
 
 my $usage = "
 Usage:
