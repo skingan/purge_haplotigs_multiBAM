@@ -111,7 +111,6 @@ sub find_path {
             for (my $i=0; $i<=$current_depth; $i++){
                 $current_path[$i] =~ s/./ /g;
             }
-            $current_path[$current_depth] =~ s/ $/|/;
         }
     }
 }
