@@ -274,7 +274,7 @@ sub write_current_seq{
     if ($table{$current_contig}{"A"}){
         if ($table{$current_contig}{"A"} eq "r"){
             # print to junk file
-            print_seq($OA, "$current_contig\_REPEAT", $current_seq);
+            print_seq($OH, "$current_contig\_REPEAT-of-$table{$current_contig}{1}", $current_seq);
             print $OL "$current_contig\t$table{$current_contig}{1}\tREPEAT\t$table{$current_contig}{B}\t$table{$current_contig}{M}\n";
         } elsif ($table{$current_contig}{"A"} eq "h"){
             # print to haplotig file
