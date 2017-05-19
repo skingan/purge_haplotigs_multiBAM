@@ -29,33 +29,36 @@ directory structure
 #!text
 -purge_haplotigs
     -bin
-    -dotplot_maker
-        -bin
-        -MDP_MUMer
+    -mummer
     -scripts
 ```
 
 - pull/clone the git
-- install MDP_mummer (modified mummer package: I made some fixes and changed some defaults to give nicer looking dotplots, otherwise it's essentially just the mummer package)
+- compile mummer (this is the standard mummer package but with a modified mummerplot script, the pipeline is setup to run from a local install of mummer)
 
 ```
 #!bash
-cd /path/to/purge_haplotigs/dotplot_maker/MDP_MUMer
-./install.sh        # tested on Ubuntu 16-LTS
+cd /path/to/purge_haplotigs/mummer
+./configure
+make
+
 ```
 
- - add the purge_haplotigs bin to your system PATH (**don't** need to add `dotplot_maker/bin` to the PATH as the scripts will find the relative path to this directory).
+ - add the purge_haplotigs bin to your system PATH (**don't** need to add the mummer directory to the PATH as the scripts will find the relative path to this directory).
 
 ```
 #!bash
 cd /path/to/purge_haplotigs/bin
 PATH=$PATH:$PWD
+
+# or add to your .bashrc
+# printf "PATH=\$PATH:$PWD\n" >> $HOME/.bashrc
 ```
 
 
 ## Usage
 
-#### PREP
+#### PREPARATION
 
 Map your pacbio subreads, or some decent short reads to your genome assembly (we want a library that produces a nice even coverage; we also want a randombest alignment for multimappers), and then sort the bam. The coverage is used to flag contigs that are likely to be haplotigs (or assembly junk etc).
 
@@ -67,7 +70,7 @@ Generate a coverage histogram by running the first script. You will also need th
 
 ```
 #!text
-zz0_coverage_hsitogram.sh aligned.sorted.bam
+zz0_coverage_hsitogram.sh aligned.bam
 ```
 
 #### MANUAL STEP
@@ -82,7 +85,7 @@ Run the second script to analyse the coverage on a contig by contig basis--produ
 
 ```
 #!text
-zz1_analyse_gencov.pl  -i genecov.out  -o coverage_stats.csv  -l 30  -m 80  -h 145  [ -j 80  -s 80 ]
+zz1_analyse_gencov.pl  -i aligned.bam.genecov  -o coverage_stats.csv  -l 30  -m 80  -h 145  [ -j 80  -s 80 ]
 
 REQUIRED:
 -i      The output of bedtools genomecov from STEP 1
@@ -94,39 +97,29 @@ REQUIRED:
 OPTIONAL:
 -j      Flag contig as "j" (junk) if this percentage or greater of the contig is 
             low/high coverage (default=80)
--s      Flag contig as "s" (suspected haplotig) if this percentage or more of the
-            contig is haploid level of coverage (default=80)
+-s      Flag contig as "s" (suspected haplotig) if this percentage or less of the
+            contig is diploid level of coverage (default=80)
 
 ```
 
 #### STEP 3
 
-Run the purging pipeline. This script will automatically run a number of steps to identify contig matches for 'suspect' contigs, perform mummer alignments, and will attempt to guess the assignment for 'suspect' contigs. It will rerun these steps a number of times in order to reach a convergence for reassigning haplotigs.
+Run the purging pipeline. This script will automatically run a blast search, perform mummer alignments etc. to assess which contigs to reassign and which to keep.
 
 ```
 #!text
-zz2_autoassign_contigs.pl  -s  coverage_stats.csv  -g  genome.fasta
+purge_haplotigs.pl  -genome genome.fasta  -coverage coverage_stats.csv
 
 REQUIRED:
--s      The coverage stats .csv file output from STEP 2
--g      The input assembly genome .fasta file (also needs the samtools index genome.fasta.fai file)
+-g / -genome        Genome assembly in fasta format. Needs to be indexed with samtools faidx.
+-c / -coverage      Contig by contig coverage stats csv file from the previous step.
 
 OPTIONAL:
--o      Output file name for the reassignment .tsv file. 
-        DEFAULT = "suspect_contig_reassign.tsv"
--t      Threads to use for the blastn search and mummer alignments.
-        DEFAULT = 4
--p      Max number of passes to perform, DEFAULT = 3. More than one purging
-        pass is usually needed due to multiple overlapping haplotigs and repeat contigs.
--c      Prefix for the curated assembly, DEFAULT = "curated"
+-t / -threads       Number of worker threads to use. DEFAULT = 4.
+-o / -outprefix     Prefix for the curated assembly. DEFAULT = "curated".
+-b / -best_match    Percent cutoff for identifying a contig as a haplotig. DEFAULT = 75.
+-m / -max_match     Percent cutoff for identifying repetitive contigs. DEFAULT = 250.
 
--m      Maxmatch cutoff percentage. Used to determine if a contig is a 
-        repetitive sequence. DEFAULT = 250
--a      Bestmatch cutoff percentage. Used to determine if a contig is a
-        haplotig. DEFAULT = 75
-
--u      Produce dotplots for unknown contigs only. DEFAULT is to produce
-        dotplots for both assigned and unassigned.
 ```
 
 ### ALL DONE! 
@@ -134,57 +127,32 @@ OPTIONAL:
 You will have five files:
 
 - **<prefix>.fasta**: These are the curated primary contigs
-- **<prefix>.haplotigs.fasta**: These are all the haplotigs identified in the initial input assembly. 
-- **<prefix>.artefacts.fasta**: These are the low/high coverage contigs (identified in STEP 2), and the repetitive contigs. 
-- **<prefix>.reassignments.tsv**: These are all the reassignments that were made.
-- **<prefix>.reassignment_paths.log**: This shows the contig association "paths", derived from the contig reassignments.
-
-You can do some further reassigning by hand if you wish, see the steps below.
-
-
-#### OPTIONAL MANUAL STEP - FURTHER CURATION
-
-Go through `suspect_contig_reassign.tsv`, look at the corresponding dotplots for each unknown contig, and make your own assessment. Modify `suspect_contig_reassign.tsv` by hand by adding or changing reassignment keys.
-
+- **<prefix>.haplotigs.fasta**: These are all the haplotigs identified in the initial input assembly. The seq IDs will remain the same but the description field for the contigs will now show the associations, e.g. 
 ```
 #!text
-
-Reassign_keys: h = haplotig, r = repeat/assembly junk, c = crop, ? = ¯\_(ツ)_/¯
-Only 'h', 'r', and 'c' flagged contigs will be reassigned.
-For cropping: positions are 1-indexed, can use "start" and "end" for start/end of contig
-NOTE: The crop region you specify here is the region you wish to KEEP as a primary contig
-(the rest of the contig will be output with the haplotigs).
-SUSPECT_CONTIG    TOP_MATCH  SECOND_MATCH  MAXMATCHCOV      BESTMATCHCOV      REASSGIN_KEY  CROP_START  CROP_END
-contig1            hit1       hit2          10.00            5.00              
-contig2            hit1       hit2          95.00            93.00             h
-contig3            hit1       hit2          400.00           98.00             r
-contig4            hit1       hit2          50.00            50.00             c             50000       end
+>000000F_003 HAPLOTIG<--000000F_009_HAPLOTIG<--000000F_PRIMARY
 ```
+- **<prefix>.artefacts.fasta**: These are the low/high coverage contigs (identified in STEP 2), and the repetitive contigs. 
+- **<prefix>.reassignments.tsv**: These are all the reassignments that were made.
+- **<prefix>.contig_associations.log**: This shows the contig association "paths", derived from the contig reassignments. e.g 
+```
+#!text
+000000F,PRIMARY -> 000000F_005,HAPLOTIG
+                -> 000000F_009,HAPLOTIG -> 000000F_003,HAPLOTIG
+                -> 000000F_010,HAPLOTIG
+```
+
+You will also get two directories of dotplots:
+
+- **dotplots_unassigned_contigs:** These are the dotplots that remain unassigned (usually because either their matching contigs was itself reassigned or because it was just under the matching coverage threashold for reassignment).
+- **dotplots_reassigned_contigs:** These are the dotplots for the contigs that were reassigned. 
+
+### FURTHER CURATION
+
+You can go through the dotplots and check the assignments. You might wish to move reassigned contigs back into the primary contig pool or purge contigs that were too ambiguous for automatic reassignment. Below are some examples of what might occur. 
 
 [Example: x-axis contig is a haplotig](https://bitbucket.org/mroachawri/purge_haplotigs/src/cf363f94c00fd865891a0469675d6df4a0813820/examples/example_haplotig.png)
 
 [Example: x-axis contig is partially a haplotig](https://bitbucket.org/mroachawri/purge_haplotigs/src/cf363f94c00fd865891a0469675d6df4a0813820/examples/example_partial_haplotig.png)
 
 [Example: x-axis contig is collapsed repeat/assembly junk](https://bitbucket.org/mroachawri/purge_haplotigs/src/cf363f94c00fd865891a0469675d6df4a0813820/examples/example_repetitive_junk_contig.png)
-
-#### OPTIONAL - STEP 4
-
-Run the fourth script to re-create your manually-reassigned curated assembly.
-
-```
-#!text
-
-zz3_reassign_contigs.pl  -t suspect_contig_reassign.tsv  -g genome.fasta  -o output_prefix
-
--t/table            The output .tsv file from previous step (either manually edited after
-                    reviewing the dotplot files, or unedited and using the auto-
-                    assignments).
-
--g/genome           The curated assembly from STEP 3; NOT the original input assembly.
-
--o/output_prefix    Prefix for the output files. The following files will be created: 
-                    <prefix>.fasta              - new primary contig assembly
-                    <prefix>.haplotigs.fasta    - primary contigs reassigned as haplotigs
-                    <prefix>.artefacts.fasta    - repeats and junk, probably not useful
-```
-#### DONE
