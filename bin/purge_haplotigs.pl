@@ -167,7 +167,7 @@ foreach my $dir ($TMP_DIR, $MINCE_DIR, $MUM_DIR, $ASSIGNED, $UNASSIGNED){
 
 open $LOG, ">", "$TMP_DIR/purge_haplotigs.log" or err("failed to open $TMP_DIR/purge_haplotigs.log for writing");
 
-foreach my $file ($out_artefacts, $out_fasta, $out_haplotigs, $out_reassignments){
+foreach my $file ($out_artefacts, $out_fasta, $out_haplotigs, $out_reassignments, $contig_paths){
     if (-s $file){
         unlink $file or err("failed to clean up previous run output file: $file");
     }
@@ -380,13 +380,13 @@ sub get_contig_hits {
         if ($contigs{$ctg}{1}){
             if ($contigs{$contigs{$ctg}{1}}{REASSIGNED}){
                 undef $contigs{$ctg}{1};
-                undef $contigs{$ctg}{ASSIGN};
+                $contigs{$ctg}{ASSIGN} = 0;
             }
         }
         if ($contigs{$ctg}{2}){
             if ($contigs{$contigs{$ctg}{2}}{REASSIGNED}){
                 undef $contigs{$ctg}{2};
-                undef $contigs{$ctg}{ASSIGN};
+                $contigs{$ctg}{ASSIGN} = 0;
             }
         }
     }
@@ -432,11 +432,11 @@ sub run_mummer_analysis {
         # skip if it's bigger than both it's hits
         if ($contigs{$contig}{2}){
             if ( $contigs{$contig}{LEN} > ( $contigs{$contigs{$contig}{1}}{LEN} + $contigs{$contigs{$contig}{2}}{LEN} ) ){
-                $contigs{$contig}{ASSIGN} = "n";
+                $contigs{$contig}{ASSIGN} = 0;
                 next CTG;
             }
         } elsif ( $contigs{$contig}{LEN} > $contigs{$contigs{$contig}{1}}{LEN} ){
-            $contigs{$contig}{ASSIGN} = "n";
+            $contigs{$contig}{ASSIGN} = 0;
             next CTG;
         }
         
@@ -463,7 +463,7 @@ sub run_mummer_analysis {
         qruncmd("cat $MINCE_DIR/$contigs{$contig}{2}.fasta >> $ref") if ($contigs{$contig}{2});
         
         # run nucmer
-        $cmd = "$Bin/../mummer/nucmer --maxmatch -p $MUM_DIR/$job.tmp $MINCE_DIR/$contig.fasta $ref 2>&1\n";
+        $cmd = "$Bin/../mummer/nucmer -p $MUM_DIR/$job.tmp $MINCE_DIR/$contig.fasta $ref 2>&1\n";
         $tmp_log .= "RUNNING: $cmd";
         $tmp_log .= `$cmd`;
         
@@ -509,13 +509,15 @@ sub run_mummer_analysis {
         if (-s "$UNASSIGNED/$contig.png"){
             unlink "$UNASSIGNED/$contig.png" or err("failed to clean up previous dotplot $UNASSIGNED/$contig.png");
         }
-        $cmd = "$Bin/../mummer/mummerplot --fat -p $UNASSIGNED/$contig $MUM_DIR/$job.tmp.m.delta 2>&1\n";
-        $tmp_log .= $cmd;
-        $tmp_log .= `$cmd`;
-        
-        # cleanup
-        foreach my $file("$UNASSIGNED/$contig.filter", "$UNASSIGNED/$contig.fplot", "$UNASSIGNED/$contig.rplot", "$UNASSIGNED/$contig.gp"){
-            unlink $file or err("failed to clean up temp file $file");
+        if ($assignment ne "n"){
+            $cmd = "$Bin/../mummer/mummerplot --fat -p $UNASSIGNED/$contig $MUM_DIR/$job.tmp.m.delta 2>&1\n";
+            $tmp_log .= $cmd;
+            $tmp_log .= `$cmd`;
+            
+            # cleanup
+            foreach my $file("$UNASSIGNED/$contig.filter", "$UNASSIGNED/$contig.fplot", "$UNASSIGNED/$contig.rplot", "$UNASSIGNED/$contig.gp"){
+                unlink $file or err("failed to clean up temp file $file\nERR_LOG:\n$tmp_log\n");
+            }
         }
         
         #
@@ -550,23 +552,24 @@ sub run_mummer_analysis {
 
 
 sub check_assignments {
-    msg("Checking contig assignments for conflicts and checking for convergence");
+    msg("Checking contig assignments for conflicts");
     
     # read in all the mummer assignments
-    open $MAS, $suspect_reassign or err("failed to open $suspect_reassign for reading");
-    
-    while(my $l = <$MAS>){
-        my @line = split(/\t/, $l);
-        $line[5] =~ s/\s//g;
-        $contigs{$line[0]}{ASSIGN} = $line[5];
-        $contigs{$line[0]}{BM} = $line[3];
-        $contigs{$line[0]}{MM} = $line[4];
+    if (-s $suspect_reassign){
+        open $MAS, $suspect_reassign or err("failed to open $suspect_reassign for reading");
+        
+        while(my $l = <$MAS>){
+            my @line = split(/\t/, $l);
+            $line[5] =~ s/\s//g;
+            $contigs{$line[0]}{ASSIGN} = $line[5];
+            $contigs{$line[0]}{BM} = $line[3];
+            $contigs{$line[0]}{MM} = $line[4];
+        }
+        
+        close $MAS;
     }
     
-    close $MAS;
-    
     # check all assignments for conflicts
-    my $convergence_check = 1;
     foreach my $ctg (sort(keys(%contigs))){
         next if ($contigs{$ctg}{ASSIGN} !~ /[rh]/i);
         next if ($contigs{$ctg}{REASSIGNED});
@@ -577,15 +580,14 @@ sub check_assignments {
         my $r_ctg = $contigs{$ctg}{1};
         if ($contigs{$r_ctg}{ASSIGN} =~ /[rh]/i){
             msg("conflict: $ctg and it's match $r_ctg both flagged for reassignment");
-            $convergence_check = 0;
             
             # if both haplotigs, keep the longest
             if ( ($contigs{$ctg}{ASSIGN} =~ /h/i) && ($contigs{$r_ctg}{ASSIGN} =~ /h/i) ){
                 if ($contigs{$ctg}{LEN} > $contigs{$r_ctg}{LEN}){
-                    $contigs{$ctg}{ASSIGN} = "u";
+                    $contigs{$ctg}{ASSIGN} = 0;
                     msg("\tkeeping longer contig $ctg");
                 } else {
-                    $contigs{$r_ctg}{ASSIGN} = "u";
+                    $contigs{$r_ctg}{ASSIGN} = 0;
                     msg("\tkeeping longer contig $r_ctg");
                 }
             }
@@ -594,10 +596,10 @@ sub check_assignments {
             elsif ( $contigs{$ctg}{ASSIGN} . $contigs{$r_ctg}{ASSIGN} =~ /rh|hr/i){
                 if ($contigs{$ctg}{ASSIGN} =~ /h/i){
                     msg("\tkeeping haplotig $ctg, removing repeat $r_ctg");
-                    $contigs{$ctg}{ASSIGN} = "u";
+                    $contigs{$ctg}{ASSIGN} = 0;
                 } else {
                     msg("\tkeeping haplotig $r_ctg, removing repeat $ctg");
-                    $contigs{$r_ctg}{ASSIGN} = "u";
+                    $contigs{$r_ctg}{ASSIGN} = 0;
                 }
             }
             
@@ -605,10 +607,10 @@ sub check_assignments {
             elsif ( ($contigs{$ctg}{ASSIGN} =~ /r/i) && ($contigs{$r_ctg}{ASSIGN} =~ /r/i) ){
                 if ($contigs{$ctg}{LEN} > $contigs{$r_ctg}{LEN}){
                     msg("\tkeeping longer repeat contig $ctg, removing repeat $r_ctg");
-                    $contigs{$ctg}{ASSIGN} = "u";
+                    $contigs{$ctg}{ASSIGN} = 0;
                 } else {
                     msg("\tkeeping longer repeat contig $r_ctg, removing repeat $ctg");
-                    $contigs{$r_ctg}{ASSIGN} = "u";
+                    $contigs{$r_ctg}{ASSIGN} = 0;
                 }
             }
             
@@ -617,25 +619,29 @@ sub check_assignments {
             }
         }
     }
-    # convergence check
-    if ($convergence_check){
-        $convergence = 1;
-        msg("convergence reached!");
-    } else {
-        msg("convergence not reached, more passes needed");
-    }
 }
 
 sub add_reassignments {
-    msg("Logging reassignments");
+    msg("Logging reassignments and checking for convergence");
+    
+    my $convergence_check = 1;
     
     foreach my $ctg(sort(keys(%contigs))){
         next if ($contigs{$ctg}{REASSIGNED});
         
         if ($contigs{$ctg}{ASSIGN} =~ /[rh]/i){
             $contigs{$ctg}{REASSIGNED} = 1;
+            $convergence_check = 0;
             qruncmd("mv $UNASSIGNED/$ctg.png $ASSIGNED/$ctg.png");
         }
+    }
+    
+    # convergence check
+    if ($convergence_check){
+        $convergence = 1;
+        msg("convergence reached!");
+    } else {
+        msg("convergence not reached, more passes needed");
     }
     
     $passes++;
