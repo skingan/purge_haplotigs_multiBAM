@@ -16,7 +16,7 @@ my $genome;
 my $coverage_stats;
 my $threads = 4;
 my $maxmatch_cutoff = 250;
-my $bestmatch_cutoff = 75;
+my $bestmatch_cutoff = 70;
 my $low_cutoff = 40;
 my $out_prefix = "curated";
 
@@ -398,8 +398,10 @@ sub get_contig_hits {
         if (!($contigs{$line[0]}{REASSIGNED}) && !($contigs{$line[1]}{REASSIGNED})){
             if (!($contigs{$line[0]}{1})){
                 $contigs{$line[0]}{1} = $line[1];
+                $contigs{$line[0]}{ASSIGN} = 0;
             } elsif (!($contigs{$line[0]}{2})){
                 $contigs{$line[0]}{2} = $line[1];
+                $contigs{$line[0]}{ASSIGN} = 0;
             }
         }
     }
@@ -426,6 +428,9 @@ sub run_mummer_analysis {
         # skip if no hits
         if (!($contigs{$contig}{1})){
             $contigs{$contig}{ASSIGN} = "n";
+            if (-s "$UNASSIGNED/$contig.png"){
+                unlink "$UNASSIGNED/$contig.png";
+            }
             next CTG;
         }
         
@@ -484,10 +489,29 @@ sub run_mummer_analysis {
         $tmp_log .= "MAXMATCH coverage = $maxmatch\n";
         
         # best-align coverage
-        $cmd = "$Bin/../mummer/show-coords -b -c $MUM_DIR/$job.tmp.r.delta | grep -P \"\\s+\\d\" | awk '{ s+=\$10 } END { print s }'\n";
+        $cmd = "$Bin/../mummer/show-coords -b $MUM_DIR/$job.tmp.r.delta | grep -P \"^\\s+\\d\" | sort -k1,1n -k2,2n |\n";
         $tmp_log .= $cmd;
-        my $bestmatch = `$cmd`;
-        $bestmatch =~ s/\s//g;
+        open (my $BMC, $cmd) or err("failed to open pipe for $cmd");
+        my $bestmatch;
+        my @p;
+        while(<$BMC>){
+            $_ =~ s/^\s+//;
+            my @l = split(/\s+/, $_);
+            if (@p){
+                if ($l[0] > $p[1]){
+                    $bestmatch+=($p[1]-$p[0]);
+                    @p=@l;
+                } else {
+                    $p[1] = $l[1];
+                }
+            } else {
+                @p=@l;
+            }
+        }
+        $bestmatch+=($p[1]-$p[0]) if (@p);
+        close $BMC;
+        $bestmatch=sprintf "%.2f", ($bestmatch/$contigs{$contig}{LEN}) * 100;
+        
         $tmp_log .= "BESTMATCH coverage = $bestmatch\n";
         
         my $assignment;
