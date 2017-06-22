@@ -6,7 +6,7 @@ use Getopt::Long;
 use Time::Piece;
 use threads;
 use Thread::Semaphore;
-use FindBin qw($Bin);
+use FindBin qw($Bin $Script);
 
 
 
@@ -14,12 +14,14 @@ use FindBin qw($Bin);
 
 my $genome;
 my $coverage_stats;
+my $bam_file;
 my $threads = 4;
 my $maxmatch_cutoff = 250;
 my $bestmatch_cutoff = 70;
 my $low_cutoff = 40;
 my $out_prefix = "curated";
-
+my $window_size = 9000;
+my $step_size = 3000;
 
 
 #---HELP MESSAGE---
@@ -27,17 +29,21 @@ my $out_prefix = "curated";
 my $usage = "
 USAGE:
 
-purge_haplotigs.pl  -genome genome.fasta  -coverage coverage_stats.csv
+purge_haplotigs.pl  -genome genome.fasta  -coverage coverage_stats.csv -bam aligned.sorted.bam
 
 REQUIRED:
 -g / -genome        Genome assembly in fasta format. Needs to be indexed with samtools faidx.
 -c / -coverage      Contig by contig coverage stats csv file from the previous step.
+-b / -bam           Samtools-indexed bam file of aligned reads/subreads to the reference (same 
+                    one used for generating the read-depth histogram).
 
 OPTIONAL:
 -t / -threads       Number of worker threads to use. DEFAULT = $threads.
 -o / -outprefix     Prefix for the curated assembly. DEFAULT = \"$out_prefix\".
--b / -best_match    Percent cutoff for identifying a contig as a haplotig. DEFAULT = $bestmatch_cutoff.
+-a / -align_cov     Percent cutoff for identifying a contig as a haplotig. DEFAULT = $bestmatch_cutoff.
 -m / -max_match     Percent cutoff for identifying repetitive contigs. DEFAULT = $maxmatch_cutoff.
+-wind_len           Length of genome window (in bp) for the coverage track in the dotplots. DEFAULT = $window_size.
+-wind_step          Step distance for genome windows for coverage track. DEFAULT = $step_size.
 
 ";
 
@@ -45,12 +51,7 @@ OPTIONAL:
 #---CHECK PROGRAMS---
 
 my $dependencies = 1;
-$dependencies x= chkprog("blastn", "-h > /dev/null 2>&1");
-$dependencies x= chkprog("makeblastdb", "-h > /dev/null 2>&1");
-$dependencies x= chkprog("$Bin/../mummer/nucmer", "-h > /dev/null 2>&1");
-$dependencies x= chkprog("$Bin/../mummer/delta-filter", "-h > /dev/null 2>&1");
-$dependencies x= chkprog("$Bin/../mummer/show-coords", "-h > /dev/null 2>&1");
-$dependencies x= chkprog("$Bin/../mummer/mummerplot", "-h > /dev/null 2>&1");
+$dependencies = chkprog("blastn", "makeblastdb", "bedtools", "lastz");
 
 if (!($dependencies)){
     err("ONE OR MORE REQUIRED PROGRAMS IS MISSING");
@@ -58,27 +59,33 @@ if (!($dependencies)){
     msg("ALL DEPENDENCIES OK");
 }
 
-my $gnuparallel = chkprog("parallel", "--version > /dev/null 2>&1");
+my $gnuparallel = chkprog("parallel");
 if (!($gnuparallel)){
     print_message("WARN: not using gnuparallel, the blastn search will take longer to run");
+} else {
+    msg("Using GNU Parallel for blastn search");
 }
 
 
 
 #---PARSE ARGUMENTS---
 
+my $args = "@ARGV";
 GetOptions (
     "genome=s" => \$genome,
     "coverage_stats=s" => \$coverage_stats,
+    "bam=s" => \$bam_file,
     "threads=i" => \$threads,
     "outprefix=s" => \$out_prefix,
-    "best_match=i" => \$bestmatch_cutoff,
-    "max_match=i" => \$maxmatch_cutoff
+    "align_cov=i" => \$bestmatch_cutoff,
+    "max_match=i" => \$maxmatch_cutoff, 
+    "wind_len=i" => \$window_size,
+    "wind_step=i" => \$step_size
 ) or die($usage);
 
-die $usage if (!($genome) || !($coverage_stats));
+die $usage if (!($genome) || !($coverage_stats) || !($bam_file));
 
-if (!(check_files($genome, "$genome.fai", $coverage_stats))){
+if (!(check_files($genome, "$genome.fai", $coverage_stats, $bam_file, "$bam_file.bai"))){
     msg("one or more files missing, exiting");
     die $usage;
 }
@@ -91,7 +98,8 @@ if (!(check_files($genome, "$genome.fai", $coverage_stats))){
 my $TMP_DIR = "tmp_purge_haplotigs";
 my $MINCE_DIR = "$TMP_DIR/minced";
 my $MINCE_DONE = "$TMP_DIR/minced.done";
-my $MUM_DIR = "$TMP_DIR/tmp_mummer";
+my $BED_COVERAGE_DONE = "$TMP_DIR/bed_coverage.done";
+my $LASTZ_DIR = "$TMP_DIR/tmp_lastz";
 my $ASSIGNED = "dotplots_reassigned_contigs";
 my $UNASSIGNED = "dotplots_unassigned_contigs";
 
@@ -102,11 +110,11 @@ my $blastgz = "$TMP_DIR/suspects.blastn.gz";
 my $blastn_done = "$TMP_DIR/blastn.done";
 my $blast_summary = "$TMP_DIR/blastn_summary.tsv";
 my $suspect_reassign = "$TMP_DIR/suspect_reassignments.tsv";
-my $mummer_log = "$TMP_DIR/mummer_analysis.stderr";
+my $lastz_log = "$TMP_DIR/lastz_analysis.stderr";
 
 # reassignment step
-my %suspects;   #   suspects flagged from blastn search
-my %junk;       #   junk flagged from coverage analysis
+my %suspects;   # suspects flagged from blastn search
+my %junk;       # junk flagged from coverage analysis
 
 my %contigs;    # $contigs{contig}{LEN} = 1 000 000     (length of contig)
                 #                 {1} = contig          (first best blastn hit)
@@ -136,6 +144,7 @@ my $out_reassignments = "$out_prefix.reassignments.tsv";
 
 
 #---THREADS---
+
 my $available_threads = Thread::Semaphore->new($threads);
 my $writing_to_out = Thread::Semaphore->new(1);
 
@@ -150,6 +159,7 @@ my $GEN;
 my $BLS;
 my $TSV;
 my $MAS;
+my $MCV;
 
 my $PTH;
 my $CUH;
@@ -159,7 +169,7 @@ my $CUT;
 
 #---OPEN DIRS ETC---
 
-foreach my $dir ($TMP_DIR, $MINCE_DIR, $MUM_DIR, $ASSIGNED, $UNASSIGNED){
+foreach my $dir ($TMP_DIR, $MINCE_DIR, $LASTZ_DIR, $ASSIGNED, $UNASSIGNED){
     if (!(-d $dir)){
         mkdir $dir or err("failed to create directory $dir");
     }
@@ -175,6 +185,24 @@ foreach my $file ($out_artefacts, $out_fasta, $out_haplotigs, $out_reassignments
 
 
 
+#---PRINT PARAMETERS---
+
+msg("
+Genome fasta:           $genome
+Coverage csv:           $coverage_stats
+Bam file:               $bam_file
+Threads:                $threads
+Cutoff, alignment:      $bestmatch_cutoff %
+Cutoff, repeat:         $maxmatch_cutoff %
+Cutoff, suspect:        $low_cutoff %
+Out prefix:             $out_prefix
+Coverage window len:    $window_size bp
+Window step dist:       $step_size bp
+
+Running using command:
+$Script $args\n
+");
+
 
 #---PIPELINE BEGIN---
 
@@ -189,10 +217,13 @@ read_cov_stats();
 # mince genome, this will make later steps run much faster
 mince_genome();
 
+# make bed windows, reads per window, for each contig. Used later for juxtaposing read-depth coverage with dotplots
+get_window_coverage();
+
 # make the blastdb and suspects.fasta, and run the blastn search
 run_blastn();
 
-# summarise hits
+# convert blast output to a simple list for quick iteration
 hit_summary();
 
 
@@ -209,7 +240,7 @@ while(!($convergence)){
     get_contig_hits();
 
     # run mummer steps
-    run_mummer_analysis();
+    run_lastz_analysis();
     
     # remove conflict reassignments
     check_assignments();
@@ -287,7 +318,7 @@ sub mince_genome {
                 print $OUT $l;
             } else {
                 my $id;
-                if ($l =~ /^>([a-zA-Z0-9_-]+)[\s\|]/){
+                if ($l =~ /^>([a-zA-Z0-9_-]+)[\s\|]/){ # cut off |quiver|arrow|etc
                     $id = $1;
                     close $OUT if ($OUT);
                     open $OUT, ">", "$MINCE_DIR/$id.fasta" or err("failed to open \"$MINCE_DIR/$id.fasta\" for writing");
@@ -302,6 +333,59 @@ sub mince_genome {
         close $GEN;
         
         qruncmd("touch $MINCE_DONE");
+    }
+}
+
+sub get_window_coverage {
+    if (-e $BED_COVERAGE_DONE){
+        msg("Skipping already completed step 'get window coverage'. If you want to rerun this step delete \"$BED_COVERAGE_DONE\" and rerun this pipeline");
+    } else {
+        msg("Getting windowed read depth coverage for each contig");
+        
+        # make the bed windows
+        runcmd("bedtools makewindows -g $genome.fai -w $window_size -s $step_size > $TMP_DIR/$genome.windows.bed");
+        
+        # get the reads per window
+        runcmd("bedtools multicov -bams $bam_file -bed $TMP_DIR/$genome.windows.bed > $TMP_DIR/$genome.mcov");
+        
+        # generate histogram table files for each contig, dump them in the minced directory
+        open $MCV, "$TMP_DIR/$genome.mcov" or err("Failed to open $TMP_DIR/$genome.mcov for reading");
+        
+        my @wind_cov_out;
+        my $cur_ctg;
+        
+        while(<$MCV>){
+            $_ =~ s/\n//;
+            if ($_){
+                my @l = split(/\s/, $_);
+                $l[0] =~ s/\|.+//; # cut off |quiver|arrow|etc
+                if (!($cur_ctg)){
+                    $cur_ctg = $l[0];
+                } elsif ($cur_ctg ne $l[0]){
+                    # dump the output when we hit a new contig
+                    write_cov_out($cur_ctg, \@wind_cov_out);
+                    # reset
+                    $cur_ctg = $l[0];
+                    @wind_cov_out = ();
+                }
+                my $p = ($l[1] + $l[2]) / 2;
+                my $d = $l[3] / ($l[2] - $l[1]);
+                push @wind_cov_out, "$p\t$d\n";
+            }
+        }
+        # dump the last contig
+        write_cov_out($cur_ctg, \@wind_cov_out);
+        
+        sub write_cov_out {
+            my $ctg = $_[0];
+            my @wind_cov = @{$_[1]};
+            open my $TMC, ">$MINCE_DIR/$ctg.cov" or err("Failed to open $MINCE_DIR/$ctg.cov for writing");
+            print $TMC @wind_cov;
+            close($TMC);
+        }
+        
+        # touch the done file
+        qruncmd("touch $BED_COVERAGE_DONE");
     }
 }
 
@@ -375,11 +459,13 @@ sub hit_summary {
 sub get_contig_hits {
     msg("getting contig hits from blastn output");
     
+    # remove reference contigs if they themselves have been reassigned 
     foreach my $ctg (sort(keys(%contigs))){
         next if ($contigs{$ctg}{REASSIGNED});
         if ($contigs{$ctg}{1}){
             if ($contigs{$contigs{$ctg}{1}}{REASSIGNED}){
                 undef $contigs{$ctg}{1};
+                undef $contigs{$ctg}{2};
                 $contigs{$ctg}{ASSIGN} = 0;
             }
         }
@@ -391,6 +477,7 @@ sub get_contig_hits {
         }
     }
     
+    # add best non-reassigned reference contigs for each contig 
     open $TSV, $blast_summary or err("failed to open $blast_summary for reading");
     
     while(my $l = <$TSV>){
@@ -399,7 +486,7 @@ sub get_contig_hits {
             if (!($contigs{$line[0]}{1})){
                 $contigs{$line[0]}{1} = $line[1];
                 $contigs{$line[0]}{ASSIGN} = 0;
-            } elsif (!($contigs{$line[0]}{2})){
+            } elsif (!($contigs{$line[0]}{2}) || ($line[1] ne $contigs{$line[0]}{1})){
                 $contigs{$line[0]}{2} = $line[1];
                 $contigs{$line[0]}{ASSIGN} = 0;
             }
@@ -409,16 +496,17 @@ sub get_contig_hits {
     close $TSV;
 }
 
-sub run_mummer_analysis {
-    msg("running mummer analysis on blastn hits");
+sub run_lastz_analysis {
+    msg("Running lastz analysis on blastn hits");
     
     my $jobnumber = 0;
     
     if (-s $suspect_reassign){
-        unlink $suspect_reassign or err("failed to clean up temp file $suspect_reassign");
+        qruncmd("mv $suspect_reassign $suspect_reassign.$passes");
     }
-    if (-s $mummer_log){
-        unlink $mummer_log or err("failed to clean up $mummer_log");
+    
+    if (-s $lastz_log){
+        unlink $lastz_log or err("failed to clean up temp file $lastz_log");
     }
     
     CTG: foreach my $contig (sort(keys(%contigs))){
@@ -434,85 +522,73 @@ sub run_mummer_analysis {
             next CTG;
         }
         
-        # skip if it's bigger than both it's hits
-        if ($contigs{$contig}{2}){
-            if ( $contigs{$contig}{LEN} > ( $contigs{$contigs{$contig}{1}}{LEN} + $contigs{$contigs{$contig}{2}}{LEN} ) ){
-                $contigs{$contig}{ASSIGN} = 0;
-                next CTG;
-            }
-        } elsif ( $contigs{$contig}{LEN} > $contigs{$contigs{$contig}{1}}{LEN} ){
-            $contigs{$contig}{ASSIGN} = 0;
-            next CTG;
-        }
-        
         # run the mummer job
         $available_threads->down(1);
-        threads->create(\&mummer_job, $jobnumber, $contig);
+        threads->create(\&lastz_job, $jobnumber, $contig);
         $jobnumber++;
     }
     
     # wait on remaining jobs
     sleep 1 while threads->list();
 }
+
 #-----
-    sub mummer_job {
+    sub lastz_job {
         my $tmp_log;
         my $cmd;
         
         my $job = $_[0];
         my $contig = $_[1];
+        my $ref1 = $contigs{$contig}{1};
+        my $ref2 = $contigs{$contig}{2} if ($contigs{$contig}{2});
         
-        # make a ref seq
-        my $ref = "$MUM_DIR/$job.ref.fa";
-        qruncmd("cat $MINCE_DIR/$contigs{$contig}{1}.fasta > $ref");
-        qruncmd("cat $MINCE_DIR/$contigs{$contig}{2}.fasta >> $ref") if ($contigs{$contig}{2});
-        
-        # run nucmer
-        $cmd = "$Bin/../mummer/nucmer -p $MUM_DIR/$job.tmp $MINCE_DIR/$contig.fasta $ref 2>&1\n";
+        # run lastz, ref1
+        $cmd = "lastz --chain --format=general --rdotplot=$LASTZ_DIR/$job.1.rdotplot $MINCE_DIR/$contig.fasta $MINCE_DIR/$ref1.fasta > $LASTZ_DIR/$job.gen 2> /dev/null\n";
         $tmp_log .= "RUNNING: $cmd";
         $tmp_log .= `$cmd`;
         
-        # run delta-filter
-        $cmd = "$Bin/../mummer/delta-filter -m $MUM_DIR/$job.tmp.delta > $MUM_DIR/$job.tmp.m.delta\n";
-        $tmp_log .= "RUNNING: $cmd";
-        $tmp_log .= `$cmd`;
+        # run lastz, ref2
+        if ($ref2){
+            $cmd = "lastz --chain --format=general --rdotplot=$LASTZ_DIR/$job.2.rdotplot $MINCE_DIR/$contig.fasta $MINCE_DIR/$ref2.fasta >> $LASTZ_DIR/$job.gen 2> /dev/null\n";
+            $tmp_log .= "RUNNING: $cmd";
+            $tmp_log .= `$cmd`;
+            if (!(-s "$LASTZ_DIR/$job.2.rdotplot")){
+                $ref2 = 0;
+            }
+        }
         
-        $cmd = "$Bin/../mummer/delta-filter -r $MUM_DIR/$job.tmp.delta > $MUM_DIR/$job.tmp.r.delta\n";
-        $tmp_log .= "RUNNING: $cmd";
-        $tmp_log .= `$cmd`;
+        # sort the lastz alignments
+        qruncmd("grep -v -P \"^#\" $LASTZ_DIR/$job.gen | sort -k5,5n -k6,6n > $LASTZ_DIR/$job.s.gen");
         
-        # max-match coverage
-        $cmd = "$Bin/../mummer/show-coords -b -c $MUM_DIR/$job.tmp.m.delta | grep -P \"\\s+\\d\" | awk '{ s+=\$10 } END { print s }'\n";
-        $tmp_log .= $cmd;
-        my $maxmatch = `$cmd`;
-        $maxmatch =~ s/\s//g;
-        $tmp_log .= "MAXMATCH coverage = $maxmatch\n";
+        # get 'maxmatch' and 'bestmatch' coverages from the sorted general output of lastz
+        open my $BMC, "$LASTZ_DIR/$job.s.gen" or err("failed to open grep/sort pipe from $LASTZ_DIR/$job.s.gen for reading");
         
-        # best-align coverage
-        $cmd = "$Bin/../mummer/show-coords -b $MUM_DIR/$job.tmp.r.delta | grep -P \"^\\s+\\d\" | sort -k1,1n -k2,2n |\n";
-        $tmp_log .= $cmd;
-        open (my $BMC, $cmd) or err("failed to open pipe for $cmd");
-        my $bestmatch;
         my @p;
+        my $bestmatch=0;
+        my $maxmatch=0;
         while(<$BMC>){
+            next if ($_ =~ /^#/);
             $_ =~ s/^\s+//;
             my @l = split(/\s+/, $_);
+            $maxmatch+=($l[5]-$l[4]);
             if (@p){
-                if ($l[0] > $p[1]){
+                if ($l[4] > $p[1]){
                     $bestmatch+=($p[1]-$p[0]);
-                    @p=@l;
-                } else {
-                    $p[1] = $l[1];
-                }
+                    @p=($l[4], $l[5]);
+                } elsif ($p[1] < $l[5]) {
+                    $p[1] = $l[5];
+                } 
             } else {
-                @p=@l;
+                @p=($l[4], $l[5]);
             }
         }
         $bestmatch+=($p[1]-$p[0]) if (@p);
         close $BMC;
-        $bestmatch=sprintf "%.2f", ($bestmatch/$contigs{$contig}{LEN}) * 100;
+        $maxmatch = sprintf "%.2f", ($maxmatch/$contigs{$contig}{LEN}) * 100;
+        $bestmatch = sprintf "%.2f", ($bestmatch/$contigs{$contig}{LEN}) * 100;
         
         $tmp_log .= "BESTMATCH coverage = $bestmatch\n";
+        $tmp_log .= "MAXMATCH coverage = $maxmatch\n";
         
         my $assignment;
         
@@ -529,26 +605,26 @@ sub run_mummer_analysis {
             $assignment = "u";
         }
         
-        # make a dotplot in unassigned
+        # make the dotplot in unassigned dir
         if (-s "$UNASSIGNED/$contig.png"){
             unlink "$UNASSIGNED/$contig.png" or err("failed to clean up previous dotplot $UNASSIGNED/$contig.png");
         }
         if ($assignment ne "n"){
-            $cmd = "$Bin/../mummer/mummerplot --fat -p $UNASSIGNED/$contig $MUM_DIR/$job.tmp.m.delta 2>&1\n";
+            if ($ref2){
+                $cmd = "$Bin/../scripts/dot_plot_plus.Rscript $UNASSIGNED/$contig.png $contig $contigs{$contig}{LEN} $MINCE_DIR/$contig.cov $ref1 $LASTZ_DIR/$job.1.rdotplot $ref2 $LASTZ_DIR/$job.2.rdotplot 2>&1 \n";
+            } else {
+                $cmd = "$Bin/../scripts/dot_plot_plus.Rscript $UNASSIGNED/$contig.png $contig $contigs{$contig}{LEN} $MINCE_DIR/$contig.cov $ref1 $LASTZ_DIR/$job.1.rdotplot 2>&1 \n";
+            }
+        
             $tmp_log .= $cmd;
             $tmp_log .= `$cmd`;
-            
-            # cleanup
-            foreach my $file("$UNASSIGNED/$contig.filter", "$UNASSIGNED/$contig.fplot", "$UNASSIGNED/$contig.rplot", "$UNASSIGNED/$contig.gp"){
-                unlink $file or err("failed to clean up temp file $file\nERR_LOG:\n$tmp_log\n");
-            }
         }
         
-        #
+        # write the output
         $writing_to_out->down(1);
         
         open my $TSV, ">>", $suspect_reassign or err("failed to open $suspect_reassign for appending");
-        open my $MLOG, ">>", $mummer_log or err("failed to open $mummer_log for appending");
+        open my $LLOG, ">>", $lastz_log or err("failed to open $lastz_log for appended writing");
         
         if ($contigs{$contig}{2}){
             print $TSV "$contig\t$contigs{$contig}{1}\t$contigs{$contig}{2}\t$bestmatch\t$maxmatch\t$assignment\n";
@@ -556,24 +632,26 @@ sub run_mummer_analysis {
             print $TSV "$contig\t$contigs{$contig}{1}\t\t$bestmatch\t$maxmatch\t$assignment\n";
         }
         
-        print $MLOG $tmp_log;
+        print $LLOG $tmp_log;
         
         close $TSV;
-        close $MLOG;
+        close $LLOG;
         
         $writing_to_out->up(1);
         
         # clean up 
-        foreach my $file ("$MUM_DIR/$job.ref.fa", "$MUM_DIR/$job.tmp.delta", "$MUM_DIR/$job.tmp.m.delta", "$MUM_DIR/$job.tmp.r.delta"){
-            unlink $file or err("failed to clean up temp file $file");
+        foreach my $file ("$LASTZ_DIR/$job.gen", "$LASTZ_DIR/$job.s.gen", "$LASTZ_DIR/$job.1.rdotplot", "$LASTZ_DIR/$job.2.rdotplot"){
+            if (-e $file){
+                unlink $file or err("failed to clean up temp file $file");
+            }
         }
         
         # exit
         $available_threads->up(1);
         threads->detach();
     }
-#-----
 
+#-----
 
 sub check_assignments {
     msg("Checking contig assignments for conflicts");
@@ -616,7 +694,7 @@ sub check_assignments {
                 }
             }
             
-            # if on is repetitive, keep haplotig
+            # if one is repetitive, keep haplotig
             elsif ( $contigs{$ctg}{ASSIGN} . $contigs{$r_ctg}{ASSIGN} =~ /rh|hr/i){
                 if ($contigs{$ctg}{ASSIGN} =~ /h/i){
                     msg("\tkeeping haplotig $ctg, removing repeat $r_ctg");
@@ -749,19 +827,31 @@ sub write_assembly {
     open $CUT, ">", $out_reassignments or err("failed to open $out_reassignments for writing");
     
     print $CUT "#reassigned_contig\ttop_hit_contig\tsecond_hit_contig\tbest_match_coverage\tmax_match_coverage\treassignment\n";
+    foreach my $ctg (sort(keys(%contigs))){
+        if (($contigs{$ctg}{REASSIGNED}) && !($junk{$ctg})){
+            write_seq($CUH, $ctg);
+            my $c2 = $contigs{$ctg}{2} || "-";
+            print $CUT "$ctg\t$contigs{$ctg}{1}\t$c2\t$contigs{$ctg}{BM}\t$contigs{$ctg}{MM}\t$contigs{$ctg}{ASSIGN}\n";
+        }
+    }
     
+    print $CUT "#contigs_kept\n";
+    foreach my $ctg (sort(keys(%contigs))){
+        if ( !($junk{$ctg}) && !($contigs{$ctg}{REASSIGNED}) ){
+            my $c1 = $contigs{$ctg}{1} || "-";
+            my $c2 = $contigs{$ctg}{2} || "-";
+            my $b = $contigs{$ctg}{BM} || "-";
+            my $m = $contigs{$ctg}{MM} || "-";
+            print $CUT "$ctg\t$c1\t$c2\t$b\t$m\tKEEP\n";
+            qruncmd("cat $MINCE_DIR/$ctg.fasta >> $out_fasta");
+        }
+    }
+    
+    print $CUT "#junk_contigs\n";
     foreach my $ctg (sort(keys(%contigs))){
         if ($junk{$ctg}){
             qruncmd("cat $MINCE_DIR/$ctg.fasta >> $out_artefacts");
-        } elsif ($contigs{$ctg}{REASSIGNED}){
-            write_seq($CUH, $ctg);
-            if ($contigs{$ctg}{2}){
-                print $CUT "$ctg\t$contigs{$ctg}{1}\t$contigs{$ctg}{2}\t$contigs{$ctg}{BM}\t$contigs{$ctg}{MM}\t$contigs{$ctg}{ASSIGN}\n";
-            } else {
-                print $CUT "$ctg\t$contigs{$ctg}{1}\t.\t$contigs{$ctg}{BM}\t$contigs{$ctg}{MM}\t$contigs{$ctg}{ASSIGN}\n";
-            }
-        } else {
-            qruncmd("cat $MINCE_DIR/$ctg.fasta >> $out_fasta");
+            print $CUT "$ctg\t-\t-\t-\t-\tJUNK\n";
         }
     }
 }
@@ -822,10 +912,18 @@ sub check_files {
 }
 
 sub chkprog {
-    print_message("CHECKING $_[0]");
-    system("@_") == 0 or (print_message("ERROR: missing program $_[0]"), return 0);
-    msg("$_[0] OK");
-    return 1;
+    my $chk=1;
+    foreach my $prog (@_){
+        print_message("CHECKING $prog");
+        my $notexists = `type $prog 2>&1 1>/dev/null || echo 1`;
+        if ($notexists){
+            print_message("ERROR: missing program $prog");
+            $chk = 0;
+        } else {
+            msg("$prog OK");
+        }
+    }
+    return $chk;
 }
 
 
