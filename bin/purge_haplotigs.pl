@@ -546,6 +546,9 @@ sub run_lastz_analysis {
         $cmd = "lastz --chain --format=general --rdotplot=$LASTZ_DIR/$job.1.rdotplot $MINCE_DIR/$contig.fasta $MINCE_DIR/$ref1.fasta > $LASTZ_DIR/$job.gen 2> /dev/null\n";
         $tmp_log .= "RUNNING: $cmd";
         $tmp_log .= `$cmd`;
+        if (!(-s "$LASTZ_DIR/$job.1.rdotplot")){
+            $ref1 = 0;
+        }
         
         # run lastz, ref2
         if ($ref2){
@@ -609,15 +612,24 @@ sub run_lastz_analysis {
         if (-s "$UNASSIGNED/$contig.png"){
             unlink "$UNASSIGNED/$contig.png" or err("failed to clean up previous dotplot $UNASSIGNED/$contig.png");
         }
-        if ($assignment ne "n"){
-            if ($ref2){
-                $cmd = "$Bin/../scripts/dot_plot_plus.Rscript $UNASSIGNED/$contig.png $contig $contigs{$contig}{LEN} $MINCE_DIR/$contig.cov $ref1 $LASTZ_DIR/$job.1.rdotplot $ref2 $LASTZ_DIR/$job.2.rdotplot 2>&1 \n";
-            } else {
-                $cmd = "$Bin/../scripts/dot_plot_plus.Rscript $UNASSIGNED/$contig.png $contig $contigs{$contig}{LEN} $MINCE_DIR/$contig.cov $ref1 $LASTZ_DIR/$job.1.rdotplot 2>&1 \n";
-            }
         
-            $tmp_log .= $cmd;
-            $tmp_log .= `$cmd`;
+        # perform a check to see if either or both reference alignments come up empty
+        undef $cmd;
+        if ($assignment ne "n"){
+            if (($ref2) && ($ref1)){
+                $cmd = "$Bin/../scripts/dot_plot_plus.Rscript $UNASSIGNED/$contig.png $contig $contigs{$contig}{LEN} $MINCE_DIR/$contig.cov $ref1 $LASTZ_DIR/$job.1.rdotplot $ref2 $LASTZ_DIR/$job.2.rdotplot 2>&1 \n";
+            } elsif (($ref1) && !($ref2)) {
+                $cmd = "$Bin/../scripts/dot_plot_plus.Rscript $UNASSIGNED/$contig.png $contig $contigs{$contig}{LEN} $MINCE_DIR/$contig.cov $ref1 $LASTZ_DIR/$job.1.rdotplot 2>&1 \n";
+            } elsif (($ref2) && !($ref1)){
+                $cmd = "$Bin/../scripts/dot_plot_plus.Rscript $UNASSIGNED/$contig.png $contig $contigs{$contig}{LEN} $MINCE_DIR/$contig.cov $ref2 $LASTZ_DIR/$job.2.rdotplot 2>&1 \n";
+            }
+            
+            if ($cmd){
+                $tmp_log .= $cmd;
+                $tmp_log .= `$cmd`;
+            } else {
+                err("Contig $contig returned alignment score but no rdotplot files");
+            }
         }
         
         # write the output
