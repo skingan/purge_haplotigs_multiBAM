@@ -8,7 +8,7 @@ Some parts of a genome may have a very high degree of heterozygosity. This cause
 
 #### The solution
 
-Identify primary contigs that are haplotigs of other primary contigs, and add them to the haplotigs. The pipeline will use mapped read coverage and blast/lastz alignments to determine which contigs to keep as primary contigs in order to create a highly contiguous haploid assembly. Dotplots are produced for all flagged contig matches, juxtaposed with read-coverage, to help the user determine the proper assignment of any remaining ambiguous contigs.
+Identify pairs of contigs that are syntenic and move one of them to the haplotig 'pool'. The pipeline uses mapped read coverage and blast/lastz alignments to determine which contigs to keep for the haploid assembly. Dotplots are produced for all flagged contig matches, juxtaposed with read-coverage, to help the user determine the proper assignment of any remaining ambiguous contigs. You can run this pipeline on either a haploid assembly (i.e. FALCON or FALCON-Unzip primary contigs) or on a phased-diploid assembly (i.e. FALCON-Unzip primary contigs + haplotigs).
 
 ## Dependencies
 
@@ -42,7 +42,7 @@ That's it!
 
 #### PREPARATION
 
-Map your PacBio subreads, or some decent long reads (or even short reads) to your genome assembly (use a library that produces an even coverage and use a 'randombest' alignment for multimappers). NOTE: you can use the phased-diploid assembly (primary contigs + haplotigs) or just the haploid assembly (primary contigs only) for this step. Sort and index the bam with SamTools. Index your genome.fasta file with samtools faidx if you haven't already done so.
+Map your PacBio subreads, or some decent long reads (or even short reads) to your haploid or diploid genome assembly. You'll want to map a library that produces an even coverage and use a 'randombest' alignment for multimappers. Sort and index the bam with SamTools. Index your genome.fasta file with samtools faidx if you haven't already done so.
 
 #### STEP 1
 
