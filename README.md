@@ -8,23 +8,24 @@ Some parts of a genome may have a very high degree of heterozygosity. This cause
 
 #### The solution
 
-Identify primary contigs that are haplotigs of other primary contigs, and move them to the haplotig 'pool'. The pipeline will use mapped read coverage and blast/lastz alignments to determine which contigs to keep as primary contigs to create a highly contiguous haploid assembly. Dotplots are produced for all flagged contig matches, juxtaposed with read-depth, to help the user determine the proper assignment of any remaining ambiguous contigs.
+Identify primary contigs that are haplotigs of other primary contigs, and add them to the haplotigs. The pipeline will use mapped read coverage and blast/lastz alignments to determine which contigs to keep as primary contigs in order to create a highly contiguous haploid assembly. Dotplots are produced for all flagged contig matches, juxtaposed with read-coverage, to help the user determine the proper assignment of any remaining ambiguous contigs.
 
 ## Dependencies
 
-- bash
-- bedtools
-- Rscript with ggplot2 and scales
-- perl 
+- Bash
+- BEDTools and SAMTools
 - blast (blastn and makeblastdb)
-- lastz
-- gnu parallel (optional but highly recommended)
+- lastz - [website](http://www.bx.psu.edu/~rsharris/lastz/), [github](https://github.com/lastz/lastz)
+- Perl 
+- Rscript (with ggplot2 and scales)
+- GNU Parallel (optional but highly recommended)
 
 
-## Install
+## Install (Ubuntu/Debian)
 
-- pull/clone the git
-- add the purge_haplotigs bin to your system PATH.
+- Install dependencies, make sure they're in the system PATH
+- Pull/clone this git
+- Add the purge_haplotigs bin to your system PATH
 
 ```
 #!bash
@@ -54,13 +55,17 @@ zz0_coverage_hsitogram.sh aligned.bam
 
 #### MANUAL STEP
 
-eyeball the histogram, you should have a bimodal histogram--one peak for haploid level of coverage, one peak for diploid level of coverage. NOTE: If you're using the phased assembly the diploid peak may be very small. Choose cutoffs for low coverage, low point between the peaks, and high coverage.
+You should have a bimodal histogram--one peak for haploid level of coverage, one peak for diploid level of coverage. NOTE: If you're using the phased assembly the diploid peak may be very small. Choose cutoffs for low coverage, low point between the peaks, and high coverage.
 
-[Example histogram and choosing cutoffs](https://bitbucket.org/mroachawri/purge_haplotigs/src/cf363f94c00fd865891a0469675d6df4a0813820/examples/example_histogram.png)
+**Example histograms for choosing cutoffs:**
+
+[PacBio subreads on Diploid-phased assembly (Primary + Haplotigs)](https://bitbucket.org/mroachawri/purge_haplotigs/src/16c0b3f8d1c7eaf32d2cac5441c6864a1cc92bd3/examples/phased_coverage_histogram.png)
+
+[Illumina PE reads on Haploid assembly (Primary contigs)](https://bitbucket.org/mroachawri/purge_haplotigs/src/16c0b3f8d1c7eaf32d2cac5441c6864a1cc92bd3/examples/coverage_histogram.png)
 
 #### STEP 2
 
-Run the second script to analyse the coverage on a contig by contig basis. This script produces a contig `coverage_stats.csv` file with suspect contigs flagged for further analysis or removal depending on read-coverage.
+Run the second script using the cutoffs from the previous step to analyse the coverage on a contig by contig basis. This script produces a contig `coverage_stats.csv` file with suspect contigs flagged for further analysis or removal depending on read-coverage.
 
 ```
 #!text
@@ -83,7 +88,7 @@ OPTIONAL:
 
 #### STEP 3
 
-Run the purging pipeline. This script will automatically run a blast search, perform lastz alignments etc. to assess which contigs to reassign and which to keep. The pipeline will make several iterations of purging.
+Run the purging pipeline. This script will automatically run a BEDTools windowed coverage analysis, a blast search, and perform lastz alignments etc. to assess which contigs to reassign and which to keep. The pipeline will make several iterations of purging. If you rerun this step it won't by default rerun the BEDTools or Blastn analysis.
 
 ```
 #!text
@@ -115,7 +120,7 @@ OPTIONAL:
 #!text
 >000000F_003 HAPLOTIG<--000000F_009_HAPLOTIG<--000000F_PRIMARY
 ```
-- **<prefix>.artefacts.fasta**: These are the very low/high coverage contigs (identified in STEP 2), you'll likely have mitochondrial contigs in here with the assembly junk. 
+- **<prefix>.artefacts.fasta**: These are the very low/high coverage contigs (identified in STEP 2). NOTE: you'll probably have mitochondrial/chloroplast/etc. contigs in here with the assembly junk. 
 - **<prefix>.reassignments.tsv**: These are all the reassignments that were made, as well as the suspect contigs that weren't reassigned.
 - **<prefix>.contig_associations.log**: This shows the contig "associations"/purging order, e.g 
 ```
@@ -134,4 +139,12 @@ OPTIONAL:
 
 You can go through the dotplots and check the assignments. You might wish to move reassigned contigs back into the primary contig pool or purge contigs that were too ambiguous for automatic reassignment. Below are some examples of what might occur. 
 
-<todo, update example pictures>
+[A haplotig](https://bitbucket.org/mroachawri/purge_haplotigs/src/16c0b3f8d1c7eaf32d2cac5441c6864a1cc92bd3/examples/haplotig.png)
+
+[Contig is mostly haplotig](https://bitbucket.org/mroachawri/purge_haplotigs/src/16c0b3f8d1c7eaf32d2cac5441c6864a1cc92bd3/examples/haploid_diploid_hemizygous.png) - This example has part of the contig with a diploid level of coverage and part at haploid level with poor alignment to either reference (possibly hemizygous region).
+
+[Haplotig with many tandem repeats](https://bitbucket.org/mroachawri/purge_haplotigs/src/16c0b3f8d1c7eaf32d2cac5441c6864a1cc92bd3/examples/repeat_rich.png)
+
+[Haplotig is palindrome](https://bitbucket.org/mroachawri/purge_haplotigs/src/16c0b3f8d1c7eaf32d2cac5441c6864a1cc92bd3/examples/haplotig_with_palindrome.png)
+
+[Contig circling through string graph 'knots'](https://bitbucket.org/mroachawri/purge_haplotigs/src/16c0b3f8d1c7eaf32d2cac5441c6864a1cc92bd3/examples/repeats_string_graph_short_cut.png) - while this may be a valid string graph path it will likely still confound short read mapping to the haploid assembly.
