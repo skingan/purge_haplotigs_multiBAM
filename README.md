@@ -83,7 +83,7 @@ OPTIONAL:
 
 #### STEP 3
 
-Run the purging pipeline. This script will automatically run a blast search, perform mummer alignments etc. to assess which contigs to reassign and which to keep. The pipeline will make several iterations of purging.
+Run the purging pipeline. This script will automatically run a blast search, perform lastz alignments etc. to assess which contigs to reassign and which to keep. The pipeline will make several iterations of purging.
 
 ```
 #!text
