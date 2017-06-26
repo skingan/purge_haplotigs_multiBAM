@@ -1,0 +1,49 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use FindBin qw($Bin);
+
+my $usage = "
+USAGE:
+purge_haplotigs  readhist,contigcov,purge  [script-specific options]
+
+readhist        First step: generate a read-depth histogram for the genome
+contigcov       Second step: get contig-by-contig stats and flag 'suspect' contigs
+purge           Third step: run the purge_haplotigs pipeline
+
+";
+
+my %scripts = (
+    readhist => \&read_hist,
+    contigcov => \&contig_cov,
+    purge => \&purge_haplotigs
+);
+
+sub read_hist {
+    system("perl $Bin/readhist.pl @ARGV") == 0 or exit(1);
+    exit(0);
+}
+
+sub contig_cov {
+    system("perl $Bin/contigcov.pl @ARGV") == 0 or exit(1);
+    exit(0);
+}
+
+sub purge_haplotigs {
+    system("perl $Bin/purge.pl @ARGV") == 0 or exit(1);
+    exit(0);
+}
+
+my $script = shift;
+
+
+if ($script){
+    if ($scripts{$script}){
+        $scripts{$script}->();
+    } else {
+        die "\nERROR: no such sub-command $script\n$usage";
+    }
+} else {
+    die $usage;
+}
