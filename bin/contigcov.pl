@@ -14,22 +14,21 @@ my $junk = 80;
 my $suspect = 80;
 
 my $usage = "
-Usage:
-
-zz1_analyse_gencov.pl  -i genecov.out  -o stats.csv  -l 30  -m 80  -h 145  [ -j $junk  -s $suspect ]
+USAGE:
+purge_haplotigs.pl contigcov  -i aligned.bam.genecov  -o coverage_stats.csv  -l 30  -m 80  -h 145  [ -j $junk  -s $suspect ]
 
 REQUIRED:
--i      The output of bedtools genomecov
--o      Output file name (csv format)
+-i      The bedtools genomecov output that was produced from 'purge_haplotigs readhist'
+-o      Choose an output file name (csv format)
 -l      The read depth low cutoff (use the histogram to eyeball these cutoffs)
 -h      The read depth high cutoff
 -m      The low point between the haploid and diploid peaks
 
 OPTIONAL:
 -j      Auto-assign contig as \"j\" (junk) if this percentage or greater of the contig is 
-            low/high coverage (default=$junk, >100 = off)
+        low/high coverage (default = $junk, > 100 = don't junk anything)
 -s      Auto-assign contig as \"s\" (suspected haplotig) if this percentage or less of the
-            contig is diploid level of coverage (default=$suspect)
+        contig is diploid level of coverage (default = $suspect)
 
 ";
 

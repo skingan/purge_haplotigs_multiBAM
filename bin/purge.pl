@@ -29,7 +29,7 @@ my $step_size = 3000;
 my $usage = "
 USAGE:
 
-purge_haplotigs.pl  -genome genome.fasta  -coverage coverage_stats.csv -bam aligned.sorted.bam
+purge_haplotigs  purge  -g genome.fasta  -c coverage_stats.csv  -b aligned.sorted.bam
 
 REQUIRED:
 -g / -genome        Genome assembly in fasta format. Needs to be indexed with samtools faidx.
@@ -50,10 +50,7 @@ OPTIONAL:
 
 #---CHECK PROGRAMS---
 
-my $dependencies = 1;
-$dependencies = chkprog("blastn", "makeblastdb", "bedtools", "lastz");
-
-if (!($dependencies)){
+if (!(chkprog("blastn", "makeblastdb", "bedtools", "lastz"))){
     err("ONE OR MORE REQUIRED PROGRAMS IS MISSING");
 } else {
     msg("ALL DEPENDENCIES OK");
@@ -199,7 +196,7 @@ Out prefix:             $out_prefix
 Coverage window len:    $window_size bp
 Window step dist:       $step_size bp
 
-Running using command:
+Running using sub-command:
 $Script $args\n
 ");
 
