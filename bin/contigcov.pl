@@ -15,7 +15,7 @@ my $suspect = 80;
 
 my $usage = "
 USAGE:
-purge_haplotigs.pl contigcov  -i aligned.bam.genecov  -o coverage_stats.csv  -l 30  -m 80  -h 145  [ -j $junk  -s $suspect ]
+purge_haplotigs  contigcov  -i aligned.bam.genecov  -o coverage_stats.csv  -l 30  -m 80  -h 145  [ -j $junk  -s $suspect ]
 
 REQUIRED:
 -i      The bedtools genomecov output that was produced from 'purge_haplotigs readhist'
@@ -110,10 +110,7 @@ close($IN);
 close($OUT);
 
 print STDERR "
-Analysis finished successfully, contig coverage stats saved to $outcsv. You can modify this before
-feeding it into the next step if you wish (i.e. if you wanted to add or remove 's' or 'j' flags 
-for certain contigs).
-
+Analysis finished successfully! Contig coverage stats saved to '$outcsv'. 
 ";
 
 exit(0);

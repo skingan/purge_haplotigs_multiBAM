@@ -51,7 +51,13 @@ if (!(-s "$bamfile.histogram.png")){
 }
 
 msg("
-'purge_haplotigs readhist' has finished. Check '$bamfile.histogram.png' to observe where your haploid and diploid peaks are and choose your low, midpoint, and high cutoffs (check the example histogram png files in this git to give you an idea). You will need '$bamfile.gencov' and the cutoffs for the next step 'purge_haplotigs contigcov'\n");
+purge_haplotigs readhist has finished! 
+
+Check '$bamfile.histogram.png' to observe where your haploid and diploid peaks are
+and choose your low, midpoint, and high cutoffs (check the example histogram png 
+files in this git to give you an idea). You will need '$bamfile.gencov' and the 
+cutoffs for the next step 'purge_haplotigs contigcov'
+");
 exit(0);
 
 #--- 

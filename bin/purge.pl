@@ -28,7 +28,6 @@ my $step_size = 3000;
 
 my $usage = "
 USAGE:
-
 purge_haplotigs  purge  -g genome.fasta  -c coverage_stats.csv  -b aligned.sorted.bam
 
 REQUIRED:
@@ -540,7 +539,7 @@ sub run_lastz_analysis {
         my $ref2 = $contigs{$contig}{2} if ($contigs{$contig}{2});
         
         # run lastz, ref1
-        $cmd = "lastz --chain --format=general --rdotplot=$LASTZ_DIR/$job.1.rdotplot $MINCE_DIR/$contig.fasta $MINCE_DIR/$ref1.fasta > $LASTZ_DIR/$job.gen 2> /dev/null\n";
+        $cmd = "lastz --gfextend --chain --gapped --seed=match14 --format=general --rdotplot=$LASTZ_DIR/$job.1.rdotplot $MINCE_DIR/$contig.fasta $MINCE_DIR/$ref1.fasta > $LASTZ_DIR/$job.gen 2> /dev/null\n";
         $tmp_log .= "RUNNING: $cmd";
         $tmp_log .= `$cmd`;
         if (!(-s "$LASTZ_DIR/$job.1.rdotplot")){
@@ -549,7 +548,7 @@ sub run_lastz_analysis {
         
         # run lastz, ref2
         if ($ref2){
-            $cmd = "lastz --chain --format=general --rdotplot=$LASTZ_DIR/$job.2.rdotplot $MINCE_DIR/$contig.fasta $MINCE_DIR/$ref2.fasta >> $LASTZ_DIR/$job.gen 2> /dev/null\n";
+            $cmd = "lastz --gfextend --chain --gapped --seed=match14 --format=general --rdotplot=$LASTZ_DIR/$job.2.rdotplot $MINCE_DIR/$contig.fasta $MINCE_DIR/$ref2.fasta >> $LASTZ_DIR/$job.gen 2> /dev/null\n";
             $tmp_log .= "RUNNING: $cmd";
             $tmp_log .= `$cmd`;
             if (!(-s "$LASTZ_DIR/$job.2.rdotplot")){
