@@ -22,6 +22,7 @@ my $low_cutoff = 40;
 my $out_prefix = "curated";
 my $window_size = 9000;
 my $step_size = 3000;
+my $lastz_parameters = "--gfextend --chain --gapped --seed=match14 --allocate:traceback=160.0M";
 
 
 #---HELP MESSAGE---
@@ -195,8 +196,8 @@ Out prefix:             $out_prefix
 Coverage window len:    $window_size bp
 Window step dist:       $step_size bp
 
-Running using sub-command:
-$Script $args\n
+Running using command:
+purge_haplotigs purge $args\n
 ");
 
 
@@ -540,7 +541,7 @@ sub run_lastz_analysis {
         my $ref2 = $contigs{$contig}{2} if ($contigs{$contig}{2});
         
         # run lastz, ref1
-        $cmd = "lastz --gfextend --chain --gapped --seed=match14 --format=general --rdotplot=$LASTZ_DIR/$job.1.rdotplot $MINCE_DIR/$contig.fasta $MINCE_DIR/$ref1.fasta > $LASTZ_DIR/$job.gen 2> $LASTZ_DIR/$job.lastz.stderr\n";
+        $cmd = "lastz $lastz_parameters --format=general --rdotplot=$LASTZ_DIR/$job.1.rdotplot $MINCE_DIR/$contig.fasta $MINCE_DIR/$ref1.fasta > $LASTZ_DIR/$job.gen 2> $LASTZ_DIR/$job.lastz.stderr\n";
         $tmp_log .= "RUNNING: $cmd";
         $tmp_log .= `$cmd`;
         if ($?){
@@ -553,7 +554,7 @@ sub run_lastz_analysis {
         
         # run lastz, ref2
         if ($ref2){
-            $cmd = "lastz --gfextend --chain --gapped --seed=match14 --format=general --rdotplot=$LASTZ_DIR/$job.2.rdotplot $MINCE_DIR/$contig.fasta $MINCE_DIR/$ref2.fasta >> $LASTZ_DIR/$job.gen 2> $LASTZ_DIR/$job.lastz.stderr\n";
+            $cmd = "lastz $lastz_parameters --format=general --rdotplot=$LASTZ_DIR/$job.2.rdotplot $MINCE_DIR/$contig.fasta $MINCE_DIR/$ref2.fasta >> $LASTZ_DIR/$job.gen 2> $LASTZ_DIR/$job.lastz.stderr\n";
             $tmp_log .= "RUNNING: $cmd";
             $tmp_log .= `$cmd`;
             if ($?){
@@ -661,7 +662,7 @@ sub run_lastz_analysis {
         $writing_to_out->up(1);
         
         # clean up 
-        foreach my $file ("$job.lastz.stderr", "$LASTZ_DIR/$job.gen", "$LASTZ_DIR/$job.s.gen", "$LASTZ_DIR/$job.1.rdotplot", "$LASTZ_DIR/$job.2.rdotplot"){
+        foreach my $file ("$LASTZ_DIR/$job.lastz.stderr", "$LASTZ_DIR/$job.gen", "$LASTZ_DIR/$job.s.gen", "$LASTZ_DIR/$job.1.rdotplot", "$LASTZ_DIR/$job.2.rdotplot"){
             if (-e $file){
                 unlink $file or err("failed to clean up temp file $file");
             }
