@@ -532,6 +532,7 @@ sub run_lastz_analysis {
     sub lastz_job {
         my $tmp_log;
         my $cmd;
+        my $lastz_fail=0;
         
         my $job = $_[0];
         my $contig = $_[1];
@@ -539,21 +540,38 @@ sub run_lastz_analysis {
         my $ref2 = $contigs{$contig}{2} if ($contigs{$contig}{2});
         
         # run lastz, ref1
-        $cmd = "lastz --gfextend --chain --gapped --seed=match14 --format=general --rdotplot=$LASTZ_DIR/$job.1.rdotplot $MINCE_DIR/$contig.fasta $MINCE_DIR/$ref1.fasta > $LASTZ_DIR/$job.gen 2> /dev/null\n";
+        $cmd = "lastz --gfextend --chain --gapped --seed=match14 --format=general --rdotplot=$LASTZ_DIR/$job.1.rdotplot $MINCE_DIR/$contig.fasta $MINCE_DIR/$ref1.fasta > $LASTZ_DIR/$job.gen 2> $LASTZ_DIR/$job.lastz.stderr\n";
         $tmp_log .= "RUNNING: $cmd";
         $tmp_log .= `$cmd`;
+        if ($?){
+            $tmp_log .= "\nERROR: lastz finished with exit status $?\n";
+            $lastz_fail=1;
+        }
         if (!(-s "$LASTZ_DIR/$job.1.rdotplot")){
             $ref1 = 0;
         }
         
         # run lastz, ref2
         if ($ref2){
-            $cmd = "lastz --gfextend --chain --gapped --seed=match14 --format=general --rdotplot=$LASTZ_DIR/$job.2.rdotplot $MINCE_DIR/$contig.fasta $MINCE_DIR/$ref2.fasta >> $LASTZ_DIR/$job.gen 2> /dev/null\n";
+            $cmd = "lastz --gfextend --chain --gapped --seed=match14 --format=general --rdotplot=$LASTZ_DIR/$job.2.rdotplot $MINCE_DIR/$contig.fasta $MINCE_DIR/$ref2.fasta >> $LASTZ_DIR/$job.gen 2> $LASTZ_DIR/$job.lastz.stderr\n";
             $tmp_log .= "RUNNING: $cmd";
             $tmp_log .= `$cmd`;
+            if ($?){
+                $tmp_log .= "\nERROR: lastz finished with exit status $?\n";
+                $lastz_fail=1;
+            }
             if (!(-s "$LASTZ_DIR/$job.2.rdotplot")){
                 $ref2 = 0;
             }
+        }
+        
+        # capture lastz STDERR message, I wouldn't mind a more elegant way to do this
+        $tmp_log .= `cat $LASTZ_DIR/$job.lastz.stderr`;
+        
+        # exit if there's a lastz failure
+        if ($lastz_fail){
+            print_lastz_log(\$tmp_log);
+            err("lastz terminated abnormally, check $lastz_log for lastz STDERR msg\n");
         }
         
         # sort the lastz alignments
@@ -628,27 +646,22 @@ sub run_lastz_analysis {
             }
         }
         
-        # write the output
+        # print the lastz log
+        print_lastz_log(\$tmp_log);
+        
+        # print the reassignment
         $writing_to_out->down(1);
-        
         open my $TSV, ">>", $suspect_reassign or err("failed to open $suspect_reassign for appending");
-        open my $LLOG, ">>", $lastz_log or err("failed to open $lastz_log for appended writing");
-        
         if ($contigs{$contig}{2}){
             print $TSV "$contig\t$contigs{$contig}{1}\t$contigs{$contig}{2}\t$bestmatch\t$maxmatch\t$assignment\n";
         } else {
             print $TSV "$contig\t$contigs{$contig}{1}\t\t$bestmatch\t$maxmatch\t$assignment\n";
         }
-        
-        print $LLOG $tmp_log;
-        
         close $TSV;
-        close $LLOG;
-        
         $writing_to_out->up(1);
         
         # clean up 
-        foreach my $file ("$LASTZ_DIR/$job.gen", "$LASTZ_DIR/$job.s.gen", "$LASTZ_DIR/$job.1.rdotplot", "$LASTZ_DIR/$job.2.rdotplot"){
+        foreach my $file ("$job.lastz.stderr", "$LASTZ_DIR/$job.gen", "$LASTZ_DIR/$job.s.gen", "$LASTZ_DIR/$job.1.rdotplot", "$LASTZ_DIR/$job.2.rdotplot"){
             if (-e $file){
                 unlink $file or err("failed to clean up temp file $file");
             }
@@ -657,6 +670,15 @@ sub run_lastz_analysis {
         # exit
         $available_threads->up(1);
         threads->detach();
+            
+        
+        sub print_lastz_log {
+            $writing_to_out->down(1);
+            open my $LLOG, ">>", $lastz_log or err("failed to open $lastz_log for appended writing");
+            print $LLOG ${$_[0]};
+            close $LLOG;
+            $writing_to_out->up(1);
+        }
     }
 
 #-----
