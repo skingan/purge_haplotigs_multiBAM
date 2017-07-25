@@ -519,7 +519,7 @@ sub run_lastz_analysis {
             next CTG;
         }
         
-        # run the mummer job
+        # run the lastz job
         $available_threads->down(1);
         threads->create(\&lastz_job, $jobnumber, $contig);
         $jobnumber++;
@@ -726,7 +726,7 @@ sub check_assignments {
             }
             
             # if one is repetitive, keep haplotig
-            elsif ( $contigs{$ctg}{ASSIGN} . $contigs{$r_ctg}{ASSIGN} =~ /rh|hr/i){
+            elsif ( ($contigs{$ctg}{ASSIGN} . $contigs{$r_ctg}{ASSIGN}) =~ /rh|hr/i){
                 if ($contigs{$ctg}{ASSIGN} =~ /h/i){
                     msg("\tkeeping haplotig $ctg, removing repeat $r_ctg");
                     $contigs{$ctg}{ASSIGN} = 0;
