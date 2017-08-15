@@ -1,140 +1,158 @@
-# purge_haplotigs
+# Purge Haplotigs
 
-Series of scripts to guide identifying haplotigs in a heterozygous diploid genome assembly (such as using FALCON or FALCON-unzip).
+Pipeline to help with curating heterozygous diploid genome assemblies (for instance when assembling using FALCON or FALCON-unzip). 
+
+## Contents
+
+ - [Introduction](#markdown-header-introduction)
+ - [Dependencies](#markdown-header-dependencies)
+ - [Installation](#markdown-header-installation)
+ - [Running Purge Haplotigs](#markdown-header-running-purge-haplotigs)
+ - [Further Curation](#markdown-header-further-curation)
+
+## Introduction
 
 #### The problem
 
-Some parts of a genome may have a very high degree of heterozygosity. This causes contigs for both haplotypes of that part of the genome to be assembled as separate primary contigs, rather than as a contig and an associated haplotig. This can be an issue for downstream analysis.
+Some parts of a genome may have a very high degree of heterozygosity. This causes contigs for both haplotypes of that part of the genome to be assembled as separate primary contigs, rather than as a contig and an associated haplotig. This can be an issue for downstream analysis whether you're working on the haploid or phased-diploid assembly.
 
 #### The solution
 
-Identify primary contigs that are haplotigs of other primary contigs, and move them to the haplotig 'pool'. These scripts use mapped read coverage and blast/mummer alignments to guide this process. Dotplots are produced for all flagged contig matches to help the user determine the proper assignment of ambiguous contigs.
+Identify pairs of contigs that are syntenic and move one of them to the haplotig 'pool'. The pipeline uses mapped read coverage and blast/lastz alignments to determine which contigs to keep for the haploid assembly. Dotplots are produced for all flagged contig matches, juxtaposed with read-coverage, to help the user determine the proper assignment of any remaining ambiguous contigs. The pipeline will run on either a haploid assembly (i.e. FALCON or FALCON-Unzip primary contigs) or on a phased-diploid assembly (i.e. FALCON-Unzip primary contigs + haplotigs). Here are [two examples](https://bitbucket.org/mroachawri/purge_haplotigs/wiki/Examples) of how Purge Haplotigs can improve a haploid and diploid assembly.
 
 ## Dependencies
 
-- bash
-- bedtools
-- Rscript with ggplot2
-- perl 
+- Bash
+- BEDTools and SAMTools
 - blast (blastn and makeblastdb)
-- make (for mummer)
-- gnu parallel (optional but recommended)
+- lastz - [website](http://www.bx.psu.edu/~rsharris/lastz/), [github](https://github.com/lastz/lastz)
+- Perl (with FindBin, Getopt::Long, Time::Piece, threads, Thread::Semaphore)
+- Rscript (with ggplot2 and scales)
+- GNU Parallel (optional but highly recommended)
 
 
-## Install
+## Installation
 
-directory structure
+Currently only tested on Ubuntu, there is a [Detailed installation](https://bitbucket.org/mroachawri/purge_haplotigs/wiki/Install) example for Ubuntu 16.04 LTS in the wiki.
 
-```
-#!text
--purge_haplotigs
-    -bin
-    -mummer
-    -scripts
-```
-
-- pull/clone the git
-- compile mummer (this is the standard mummer package but with a modified mummerplot script, the pipeline is setup to run from a local install of mummer)
+- Install dependencies, make sure they're in the system PATH
+- Pull/clone this git
+- Add the purge_haplotigs bin to your system PATH
 
 ```
 #!bash
-cd /path/to/purge_haplotigs/mummer
-./configure
-make
-
-```
-
- - add the purge_haplotigs bin to your system PATH (**don't** need to add the mummer directory to the PATH as the scripts will find the relative path to this directory).
-
-```
-#!bash
+# navigate to the purge_haploitgs bin directory
 cd /path/to/purge_haplotigs/bin
-PATH=$PATH:$PWD
 
-# or add to your .bashrc
-# printf "PATH=\$PATH:$PWD\n" >> $HOME/.bashrc
+# add it to the system PATH
+export PATH=$PATH:$PWD
+
+# optionally add a line to your .bashrc
+printf "\nexport PATH=\$PATH:$PWD\n" >> $HOME/.bashrc
 ```
 
+- That's it! check that it's running ok
+```
+#!bash
+$ purge_haplotigs
 
-## Usage
+USAGE:
+purge_haplotigs  readhist,contigcov,purge  [script-specific options]
 
-#### PREPARATION
+readhist        First step: generate a read-depth histogram for the genome
+contigcov       Second step: get contig-by-contig stats and flag suspect contigs
+purge           Third step: run the purge_haplotigs pipeline
+```
 
-Map your pacbio subreads, or some decent short reads to your genome assembly (we want a library that produces a nice even coverage; we also want a randombest alignment for multimappers), and then sort the bam. The coverage is used to flag contigs that are likely to be haplotigs (or assembly junk etc).
+## Running Purge Haplotigs
 
-Index your genome.fasta file with samtools faidx if not already done.
+There is a [tutorial](https://bitbucket.org/mroachawri/purge_haplotigs/wiki/Tutorial) in the wiki that you can follow which goes into a bit more detail for each step.
+
+#### Preparation
+
+Map your PacBio subreads, or some decent long reads (or even short reads) to your haploid or diploid genome assembly. You'll want to map a library that produces an even coverage and use a 'randombest' alignment for multimappers. Sort and index the bam with `samtools index`. Index your genome.fasta file with `samtools faidx` if you haven't already done so.
 
 #### STEP 1
 
-Generate a coverage histogram by running the first script. You will also need the bedtools genecov output file for STEP 2.
+Generate a coverage histogram by running the first script. This script will produce a histogram png image file for you to look at and a BEDTools 'genomecov' output file that you'll need for STEP 2.
 
 ```
 #!text
-zz0_coverage_hsitogram.sh aligned.bam
+purge_haplotigs  readhist  <bam>
+
+REQUIRED:
+<bam>   Sorted bam file of reads aligned to your genome assembly
+
 ```
 
 #### MANUAL STEP
 
-eyeball the histogram, you should have two peaks, one for haploid level of coverage, the other for diploid level of coverage. Choose cutoffs for low coverage, low point between the peaks, and high coverage.
+You should have a bimodal histogram--one peak for haploid level of coverage, one peak for diploid level of coverage. NOTE: If you're using the phased assembly the diploid peak may be very small. Choose cutoffs for low coverage, low point between the two peaks, and high coverage. Example histograms for choosing cutoffs:
 
-[Example histogram and choosing cutoffs](https://bitbucket.org/mroachawri/purge_haplotigs/src/cf363f94c00fd865891a0469675d6df4a0813820/examples/example_histogram.png)
+[PacBio subreads on Diploid-phased assembly (Primary + Haplotigs)](examples/phased_coverage_histogram.png)
+
+[Illumina PE reads on Haploid assembly (Primary contigs)](examples/coverage_histogram.png)
 
 #### STEP 2
 
-Run the second script to analyse the coverage on a contig by contig basis--produces a contig `coverage_stats.csv` file with flagged contigs for further analysis.
+Run the second script using the cutoffs from the previous step to analyse the coverage on a contig by contig basis. This script produces a contig coverage stats csv file with suspect contigs flagged for further analysis or removal.
 
 ```
 #!text
-zz1_analyse_gencov.pl  -i aligned.bam.genecov  -o coverage_stats.csv  -l 30  -m 80  -h 145  [ -j 80  -s 80 ]
+purge_haplotigs  contigcov  -i aligned.bam.genecov  -o coverage_stats.csv  -l 30  -m 80  -h 145  [ -j 80  -s 80 ]
 
 REQUIRED:
--i      The output of bedtools genomecov from STEP 1
--o      Output file name (csv format)
+-i      The bedtools genomecov output that was produced from 'purge_haplotigs readhist'
+-o      Choose an output file name (csv format)
 -l      The read depth low cutoff (use the histogram to eyeball these cutoffs)
 -h      The read depth high cutoff
 -m      The low point between the haploid and diploid peaks
 
 OPTIONAL:
--j      Flag contig as "j" (junk) if this percentage or greater of the contig is 
-            low/high coverage (default=80)
--s      Flag contig as "s" (suspected haplotig) if this percentage or less of the
-            contig is diploid level of coverage (default=80)
+-j      Auto-assign contig as "j" (junk) if this percentage or greater of the contig is
+        low/high coverage (default = 80, > 100 = don't junk anything)
+-s      Auto-assign contig as "s" (suspected haplotig) if this percentage or less of the
+        contig is diploid level of coverage (default = 80)
 
 ```
 
 #### STEP 3
 
-Run the purging pipeline. This script will automatically run a blast search, perform mummer alignments etc. to assess which contigs to reassign and which to keep.
+Run the purging pipeline. This script will automatically run a BEDTools windowed coverage analysis, a blast search, and perform lastz alignments etc. to assess which contigs to reassign and which to keep. The pipeline will make several iterations of purging.
 
 ```
 #!text
-purge_haplotigs.pl  -genome genome.fasta  -coverage coverage_stats.csv
+purge_haplotigs  purge  -g genome.fasta  -c coverage_stats.csv -b aligned.sorted.bam
 
 REQUIRED:
 -g / -genome        Genome assembly in fasta format. Needs to be indexed with samtools faidx.
 -c / -coverage      Contig by contig coverage stats csv file from the previous step.
+-b / -bam           Samtools-indexed bam file of aligned reads/subreads to the reference (same
+                    one used for generating the read-depth histogram).
 
 OPTIONAL:
 -t / -threads       Number of worker threads to use. DEFAULT = 4.
 -o / -outprefix     Prefix for the curated assembly. DEFAULT = "curated".
--b / -best_match    Percent cutoff for identifying a contig as a haplotig. DEFAULT = 75.
+-a / -align_cov     Percent cutoff for identifying a contig as a haplotig. DEFAULT = 70.
 -m / -max_match     Percent cutoff for identifying repetitive contigs. DEFAULT = 250.
+-wind_len           Length of genome window (in bp) for the coverage track in the dotplots. DEFAULT = 9000.
+-wind_step          Step distance for genome windows for coverage track. DEFAULT = 3000.
 
 ```
 
-### ALL DONE! 
+#### All done! 
 
-You will have five files:
+You will have five files
 
 - **<prefix>.fasta**: These are the curated primary contigs
-- **<prefix>.haplotigs.fasta**: These are all the haplotigs identified in the initial input assembly. The seq IDs will remain the same but the description field for the contigs will now show the associations, e.g. 
+- **<prefix>.haplotigs.fasta**: These are all the haplotigs identified in the initial input assembly. The seq IDs will remain the same but the description field for the contigs will now show the contig "associations" and purging order, e.g. 
 ```
 #!text
 >000000F_003 HAPLOTIG<--000000F_009_HAPLOTIG<--000000F_PRIMARY
 ```
-- **<prefix>.artefacts.fasta**: These are the low/high coverage contigs (identified in STEP 2), and the repetitive contigs. 
-- **<prefix>.reassignments.tsv**: These are all the reassignments that were made.
-- **<prefix>.contig_associations.log**: This shows the contig association "paths", derived from the contig reassignments. e.g 
+- **<prefix>.artefacts.fasta**: These are the very low/high coverage contigs (identified in STEP 2). NOTE: you'll probably have mitochondrial/chloroplast/etc. contigs in here with the assembly junk. 
+- **<prefix>.reassignments.tsv**: These are all the reassignments that were made, as well as the suspect contigs that weren't reassigned.
+- **<prefix>.contig_associations.log**: This shows the contig "associations"/purging order, e.g 
 ```
 #!text
 000000F,PRIMARY -> 000000F_005,HAPLOTIG
@@ -142,17 +160,21 @@ You will have five files:
                 -> 000000F_010,HAPLOTIG
 ```
 
-You will also get two directories of dotplots:
+You will also get two directories of dotplots juxtaposed with read-coverage tracks
 
-- **dotplots_unassigned_contigs:** These are the dotplots that remain unassigned (usually because either their matching contigs was itself reassigned or because it was just under the matching coverage threashold for reassignment).
+- **dotplots_unassigned_contigs:** These are the dotplots for the suspect contigs that remain unassigned.
 - **dotplots_reassigned_contigs:** These are the dotplots for the contigs that were reassigned. 
 
-### FURTHER CURATION
+## Further Curation
 
 You can go through the dotplots and check the assignments. You might wish to move reassigned contigs back into the primary contig pool or purge contigs that were too ambiguous for automatic reassignment. Below are some examples of what might occur. 
 
-[Example: x-axis contig is a haplotig](https://bitbucket.org/mroachawri/purge_haplotigs/src/cf363f94c00fd865891a0469675d6df4a0813820/examples/example_haplotig.png)
+[A haplotig](examples/haplotig.png)
 
-[Example: x-axis contig is partially a haplotig](https://bitbucket.org/mroachawri/purge_haplotigs/src/cf363f94c00fd865891a0469675d6df4a0813820/examples/example_partial_haplotig.png)
+[Contig is mostly haplotig](examples/haploid_diploid_hemizygous.png) - This example has part of the contig with a diploid level of coverage and part at haploid level with poor alignment to either reference (possibly hemizygous region).
 
-[Example: x-axis contig is collapsed repeat/assembly junk](https://bitbucket.org/mroachawri/purge_haplotigs/src/cf363f94c00fd865891a0469675d6df4a0813820/examples/example_repetitive_junk_contig.png)
+[Haplotig with many tandem repeats](examples/repeat_rich.png)
+
+[Haplotig is palindrome](examples/haplotig_with_palindrome.png)
+
+[Contig circling through string graph 'knots'](examples/repeats_string_graph_short_cut.png) - while this may be a valid string graph path it will likely still confound short read mapping to the haploid assembly.
