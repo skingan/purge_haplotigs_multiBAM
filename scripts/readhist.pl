@@ -2,8 +2,9 @@
 
 use strict;
 use warnings;
-use Time::Piece;
 use FindBin qw($Bin);
+use lib "$Bin/../lib";
+use PipeUtils;
 
 my $usage = "
 USAGE:
@@ -14,7 +15,7 @@ REQUIRED:
 
 ";
 
-if (chkprog("bedtools", "Rscript")){
+if (check_programs("bedtools", "Rscript")){
     msg("ALL DEPENDENCIES OK");
 } else {
     err("ONE OR MORE DEPENDENCIES MISSING");
@@ -28,8 +29,9 @@ if (!(check_files("$bamfile"))){
     die $usage;
 }
 
-if (!(-s "$bamfile.gencov")){
+if (!(-e "$bamfile.gencov.done") || !(-s "$bamfile.genecov")){
     runcmd("bedtools genomecov -ibam $bamfile -max 200 > $bamfile.gencov");
+    qruncmd("touch $bamfile.genecov.done");
 } else {
     msg("$bamfile.genecov found, skipping bedtools genomecov step");
 }
@@ -60,51 +62,3 @@ cutoffs for the next step 'purge_haplotigs contigcov'
 ");
 exit(0);
 
-#--- 
-
-sub print_message {
-    my $t = localtime;
-    my $line = $t->dmy . " " . $t->hms . " @_\n";
-    print STDERR $line;
-}
-
-sub msg {
-    print_message("INFO: @_");
-}
-
-sub err {
-    print_message("ERROR: @_\n\nPurge_Haplotigs has failed.\n");
-    exit(1);
-}
-
-sub runcmd {
-    print_message("RUNNING: @_");
-    system("@_") == 0 or err("Failed to run @_\nCheck $_[-1] for possible causes.");
-    print_message("FINISHED: @_")
-}
-
-sub check_files {
-    my $check=1;
-    foreach(@_){
-        if (!(-s $_)){
-            print_message("ERROR: file \"$_\" does not exist or is empty");
-            $check=0;
-        }
-    }
-    return $check;
-}
-
-sub chkprog {
-    my $chk=1;
-    foreach my $prog (@_){
-        print_message("CHECKING $prog");
-        my $notexists = `type $prog 2>&1 1>/dev/null || echo 1`;
-        if ($notexists){
-            print_message("ERROR: missing program $prog");
-            $chk = 0;
-        } else {
-            msg("$prog OK");
-        }
-    }
-    return $chk;
-}

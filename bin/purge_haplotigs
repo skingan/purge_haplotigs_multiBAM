@@ -6,32 +6,39 @@ use FindBin qw($Bin);
 
 my $usage = "
 USAGE:
-purge_haplotigs  readhist,contigcov,purge  [script-specific options]
+purge_haplotigs  readhist,contigcov,purge,ncbiplace  [script-specific options]
 
 readhist        First step: generate a read-depth histogram for the genome
 contigcov       Second step: get contig-by-contig stats and flag 'suspect' contigs
 purge           Third step: run the purge_haplotigs pipeline
+ncbiplace       A script to generate a placement file for submission to NCBI
 
 ";
 
 my %scripts = (
     readhist => \&read_hist,
     contigcov => \&contig_cov,
-    purge => \&purge_haplotigs
+    purge => \&purge_haplotigs,
+    ncbiplace => \&ncbi_placements,
 );
 
 sub read_hist {
-    system("perl $Bin/readhist.pl @ARGV") == 0 or exit(1);
+    system("perl $Bin/../scripts/readhist.pl @ARGV") == 0 or exit(1);
     exit(0);
 }
 
 sub contig_cov {
-    system("perl $Bin/contigcov.pl @ARGV") == 0 or exit(1);
+    system("perl $Bin/../scripts/contigcov.pl @ARGV") == 0 or exit(1);
     exit(0);
 }
 
 sub purge_haplotigs {
-    system("perl $Bin/purge.pl @ARGV") == 0 or exit(1);
+    system("perl $Bin/../scripts/purge.pl @ARGV") == 0 or exit(1);
+    exit(0);
+}
+
+sub ncbi_placements {
+    system("perl $Bin/../scripts/ncbi_placements.pl @ARGV") == 0 or exit(1);
     exit(0);
 }
 

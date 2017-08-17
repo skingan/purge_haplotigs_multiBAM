@@ -72,8 +72,8 @@ my $IN;
 my $OUT;
 
 
-open($IN, $incov) or die "failed to open $incov for reading\n";
-open($OUT, ">$outcsv") or die "failed to open $outcsv for writing\n";
+open $IN, "<", $incov or die "failed to open $incov for reading\n";
+open $OUT, ">", $outcsv or die "failed to open $outcsv for writing\n";
 
 print $OUT "#contig,contig_reassign,bases_hap_dip,bases_low_high,bases_all,perc_low_coverage,perc_hap_coverage,perc_dip_coverage,perc_high_coverage\n";
 
