@@ -9,12 +9,11 @@ use Exporter 'import';
 our @EXPORT = qw(msg err runcmd qruncmd check_programs check_files);
 
 
-
-
 sub print_message {
     my $t = localtime;
     my $line = $t->dmy . " " . $t->hms . " @_\n";
     print STDERR $line;
+    print $::LOG $line if ($::LOG);
 }
 
 sub msg {

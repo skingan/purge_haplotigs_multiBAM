@@ -10,6 +10,13 @@ use lib "$Bin/../lib";
 use PipeUtils;
 
 
+#---SET UP LOGGING---
+our $LOG;
+my $TMP_DIR = "tmp_purge_haplotigs";
+(-d $TMP_DIR) or mkdir $TMP_DIR;
+open $LOG, ">", "$TMP_DIR/purge_haplotigs.log" or die "failed to open log file for writing";
+
+
 
 #---INPUT PARAMETERS---
 
@@ -98,7 +105,6 @@ if (!(check_files($genome, $coverage_stats, $bam_file))){
 #---GLOBAL VARIABLES---
 
 # files etc
-my $TMP_DIR = "tmp_purge_haplotigs";
 my $MINCE_DIR = "$TMP_DIR/minced";
 my $MINCE_DONE = "$TMP_DIR/minced.done";
 my $BED_COVERAGE_DONE = "$TMP_DIR/bed_coverage.done";
@@ -156,8 +162,6 @@ my $writing_to_out = Thread::Semaphore->new(1);
 
 
 #---FILEHANDLES---
-
-my $LOG;
 my $FAI;
 my $CSV;
 my $GEN;
@@ -172,6 +176,10 @@ my $CUT;
 
 
 
+
+
+
+
 #---OPEN DIRS ETC---
 
 foreach my $dir ($TMP_DIR, $MINCE_DIR, $LASTZ_DIR, $ASSIGNED, $UNASSIGNED){
@@ -180,7 +188,6 @@ foreach my $dir ($TMP_DIR, $MINCE_DIR, $LASTZ_DIR, $ASSIGNED, $UNASSIGNED){
     }
 }
 
-open $LOG, ">", "$TMP_DIR/purge_haplotigs.log" or err("failed to open $TMP_DIR/purge_haplotigs.log for writing");
 
 foreach my $file ($out_artefacts, $out_fasta, $out_haplotigs, $out_reassignments, $contig_paths){
     if (-s $file){
