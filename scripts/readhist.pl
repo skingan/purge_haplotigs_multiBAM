@@ -6,52 +6,66 @@ use FindBin qw($Bin);
 use lib "$Bin/../lib";
 use PipeUtils;
 
-my $usage = "
-USAGE:
-purge_haplotigs  readhist  <bam>
 
-REQUIRED:
-<bam>   Sorted bam file of reads aligned to your genome assembly
 
-";
+#---SET UP LOGGING---
+our $LOG;
+my $TMP_DIR = "tmp_purge_haplotigs";
+(-d $TMP_DIR) or mkdir $TMP_DIR;
+open $LOG, ">", "$TMP_DIR/purge_haplotigs_readhist.log" or die "failed to open log file for writing";
 
-if (check_programs("bedtools", "Rscript")){
+
+
+# pre flight
+if (check_programs("bedtools", "Rscript", "samtools")){
     msg("ALL DEPENDENCIES OK");
 } else {
     err("ONE OR MORE DEPENDENCIES MISSING");
 }
-
-my $bamfile = shift or die $usage;
-my $TEMP = "tmp_purge_haplotigs";
 my $SCRIPT = "$Bin/../scripts/";
+
+
+
+my $usage = "
+USAGE:
+purge_haplotigs  readhist  aligned.bam
+
+REQUIRED:
+aligned.bam   Samtools-indexed bam file of aligned and sorted reads/subreads to the reference
+
+";
+
+
+
+# parse and check file
+my $bamfile = shift or die $usage;
 
 if (!(check_files("$bamfile"))){
     die $usage;
 }
 
-if (!(-e "$bamfile.gencov.done") || !(-s "$bamfile.genecov")){
-    runcmd("bedtools genomecov -ibam $bamfile -max 200 > $bamfile.gencov");
-    qruncmd("touch $bamfile.genecov.done");
+# run bedtools genomecov if needed
+if (!(-s "$TMP_DIR/$bamfile.genecov")){
+    runcmd({ command => "bedtools genomecov -ibam $bamfile -max 200 > $TMP_DIR/$bamfile.gencov.temp 2> $TMP_DIR/bedtools.genomecov.stderr  &&  mv $TMP_DIR/$bamfile.gencov.temp $bamfile.gencov", logfile => "$TMP_DIR/bedtools.genomecov.stderr" });
 } else {
-    msg("$bamfile.genecov found, skipping bedtools genomecov step");
+    msg("$TMP_DIR/$bamfile.genecov found, skipping bedtools genomecov step");
 }
 
-if (!(-d $TEMP)){
-    mkdir $TEMP or err("failed to create temp folder $TEMP");
-}
-
-if (!(-s "$TEMP/$bamfile.histogram.csv")){
-    runcmd("grep genome $bamfile.gencov | awk '{ print \$2 \",\" \$3 }' > $TEMP/$bamfile.histogram.csv");
+# make the histogram csv
+if (!(-s "$TMP_DIR/$bamfile.histogram.csv")){
+    runcmd( { command => "grep genome $bamfile.gencov | awk '{ print \$2 \",\" \$3 }' > $TMP_DIR/$bamfile.histogram.csv" } );
 } else {
-    msg("$bamfile.histogram.csv found, skipping bash step");
+    msg("$bamfile.histogram.csv found, skipping step");
 }
 
+# make the histogram png
 if (!(-s "$bamfile.histogram.png")){
-    runcmd("$SCRIPT/gen_histogram.Rscript $TEMP/$bamfile.histogram.csv $bamfile.histogram.png");
+    runcmd( { command => "$SCRIPT/gen_histogram.Rscript $TMP_DIR/$bamfile.histogram.csv $bamfile.histogram.png 2> $TMP_DIR/gen_histogram.stderr", logfile => "$TMP_DIR/gen_histogram.stderr" });
 } else {
     msg("$bamfile.histogram.png found, skipping Rscript step");
 }
 
+# done
 msg("
 purge_haplotigs readhist has finished! 
 
@@ -60,5 +74,6 @@ and choose your low, midpoint, and high cutoffs (check the example histogram png
 files in this git to give you an idea). You will need '$bamfile.gencov' and the 
 cutoffs for the next step 'purge_haplotigs contigcov'
 ");
+
 exit(0);
 

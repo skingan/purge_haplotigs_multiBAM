@@ -14,7 +14,7 @@ use PipeUtils;
 our $LOG;
 my $TMP_DIR = "tmp_purge_haplotigs";
 (-d $TMP_DIR) or mkdir $TMP_DIR;
-open $LOG, ">", "$TMP_DIR/purge_haplotigs.log" or die "failed to open log file for writing";
+open $LOG, ">", "$TMP_DIR/purge_haplotigs_purge.log" or die "failed to open log file for writing";
 
 
 
@@ -37,13 +37,13 @@ my $lastz_parameters = "--gfextend --chain --gapped --seed=match14 --allocate:tr
 
 my $usage = "
 USAGE:
-purge_haplotigs  purge  -g genome.fasta  -c coverage_stats.csv  -b aligned.sorted.bam
+purge_haplotigs  purge  -g genome.fasta  -c coverage_stats.csv  -b aligned.bam
 
 REQUIRED:
 -g / -genome        Genome assembly in fasta format. Needs to be indexed with samtools faidx.
 -c / -coverage      Contig by contig coverage stats csv file from the previous step.
--b / -bam           Samtools-indexed bam file of aligned reads/subreads to the reference (same 
-                    one used for generating the read-depth histogram).
+-b / -bam           Samtools-indexed bam file of aligned and sorted reads/subreads to the reference 
+                    (same one used for generating the read-depth histogram).
 
 OPTIONAL:
 -t / -threads       Number of worker threads to use. DEFAULT = $threads.
@@ -96,10 +96,6 @@ if (!(check_files($genome, $coverage_stats, $bam_file))){
     die $usage;
 }
 
-# check fasta and bam index files
-(-s "$genome.fai") or runcmd("samtools faidx $genome");
-(-s "$bam_file.bai") or runcmd("samtools index $bam_file");
-
 
 
 #---GLOBAL VARIABLES---
@@ -121,7 +117,6 @@ my $blast_summary = "$TMP_DIR/blastn_summary.tsv";
 my $suspect_reassign = "$TMP_DIR/suspect_reassignments.tsv";
 my $lastz_log = "$TMP_DIR/lastz_analysis.stderr";
 
-
 # reassignment step
 my %suspects;   # suspects flagged from blastn search
 my %junk;       # junk flagged from coverage analysis
@@ -135,13 +130,13 @@ my %contigs;    # $contigs{contig}{LEN} = 1 000 000     (length of contig)
                 #                 {REASSIGNED} = 1/0    (if it's been reassigned)
                 #                 {SUFFIX} = " <<HTIG"  (for reassigned ctgs, will be the fasta description)
 
-
 # contig association step:
 my %primaries;
 my %refs;
 my @current_path;
 my @current_path_rename;
 my $current_depth;
+
 
 
 #---OUTPUT FILES---
@@ -169,14 +164,9 @@ my $BLS;
 my $TSV;
 my $MAS;
 my $MCV;
-
 my $PTH;
 my $CUH;
 my $CUT;
-
-
-
-
 
 
 
@@ -285,6 +275,7 @@ msg("\n\n###\n\nPURGE HAPLOTIGS HAS COMPLETED SUCCESSFULLY!\n\n###\n");
 
 
 sub read_fasta_fai {
+    (-s "$genome.fai") or runcmd({ command => "samtools faidx $genome 2> $TMP_DIR/samtools.faidx.stderr", logfile => "$TMP_DIR/samtools.faidx.stderr" });
     msg("reading in genome index file: $genome.fai");
     
     open $FAI, "<",  "$genome.fai" or err ("failed to open  $genome.fai for reading");
@@ -364,11 +355,13 @@ sub get_window_coverage {
     } else {
         msg("Getting windowed read depth coverage for each contig");
         
+        (-s "$bam_file.bai") or runcmd({ command => "samtools index $bam_file 2> $TMP_DIR/samtools.index.sdterr", logfile => "$TMP_DIR/samtools.index.sdterr" });
+        
         # make the bed windows
-        runcmd("bedtools makewindows -g $genome.fai -w $window_size -s $step_size > $TMP_DIR/$genome.windows.bed");
+        runcmd({ command => "bedtools makewindows -g $genome.fai -w $window_size -s $step_size > $TMP_DIR/$genome.windows.bed.tmp 2> $TMP_DIR/bedtools.mkwind.stderr  &&  mv $TMP_DIR/$genome.windows.bed.tmp $TMP_DIR/$genome.windows.bed", logfile => "$TMP_DIR/bedtools.mkwind.stderr" });
         
         # get the reads per window
-        runcmd("bedtools multicov -bams $bam_file -bed $TMP_DIR/$genome.windows.bed > $TMP_DIR/$genome.mcov");
+        runcmd({ command => "bedtools multicov -bams $bam_file -bed $TMP_DIR/$genome.windows.bed > $TMP_DIR/$genome.mcov.tmp 2> $TMP_DIR/bedtools.mcov.stderr  &&  mv $TMP_DIR/$genome.mcov.tmp $TMP_DIR/$genome.mcov", logfile => "$TMP_DIR/bedtools.mcov.stderr" });
         
         # generate histogram table files for each contig, dump them in the minced directory
         open $MCV, "$TMP_DIR/$genome.mcov" or err("Failed to open $TMP_DIR/$genome.mcov for reading");
@@ -414,7 +407,7 @@ sub get_window_coverage {
 
 
 sub run_blastn {
-    if ( (-e $blastn_done) && (-s $blastgz) ){
+    if (-s $blastgz){
         msg("skipping already completed blastn step. To rerun this step please delete $blastn_done and rerun this pipeline");
     } else {
         
@@ -436,17 +429,16 @@ sub run_blastn {
             }
         }
         
-        runcmd("makeblastdb -in $tmp_asm -dbtype nucl -out $blastdb 2>&1 1>", "$TMP_DIR/makeblastdb.stderr");
+        runcmd({ command => "makeblastdb -in $tmp_asm -dbtype nucl -out $blastdb 2>&1 1> $TMP_DIR/makeblastdb.stderr", logfile => "$TMP_DIR/makeblastdb.stderr" });
         
         msg("running blastn analysis");
         
         if ($gnuparallel){
-            runcmd("cat $suspects_fasta | parallel --no-notice -j $threads --block 100k --recstart '>' --pipe blastn -db $blastdb -outfmt 6 -evalue 0.000000000001 -max_target_seqs 20 -max_hsps 1000 -word_size 28 -culling_limit 10 -query - 2> $TMP_DIR/gnuparallel.stderr | awk ' \$1 != \$2 && \$4 > 500 { print } ' | gzip - > $blastgz");
+            runcmd({ command => "cat $suspects_fasta | parallel --no-notice -j $threads --block 100k --recstart '>' --pipe blastn -db $blastdb -outfmt 6 -evalue 0.000000000001 -max_target_seqs 20 -max_hsps 1000 -word_size 28 -culling_limit 10 -query - 2> $TMP_DIR/gnuparallel.stderr | awk ' \$1 != \$2 && \$4 > 500 { print } ' | gzip - > $blastgz.tmp", logfile => "$TMP_DIR/gnuparallel.stderr" });
         } else {
-            runcmd("blastn -query $suspects_fasta -db $blastdb -outfmt 6 -evalue 0.000000000001 -num_threads $threads -max_target_seqs 3 -max_hsps 1000 -word_size 28 -culling_limit 10 2> $TMP_DIR/blastn.stderr |  awk ' \$1 != \$2 && \$4 > 500 { print } ' | gzip - > $blastgz");
+            runcmd({ command => "blastn -query $suspects_fasta -db $blastdb -outfmt 6 -evalue 0.000000000001 -num_threads $threads -max_target_seqs 3 -max_hsps 1000 -word_size 28 -culling_limit 10 2> $TMP_DIR/blastn.stderr |  awk ' \$1 != \$2 && \$4 > 500 { print } ' | gzip - > $blastgz.tmp.gz", logfile => "$TMP_DIR/blastn.stderr" });
         }
-        
-        qruncmd("touch $blastn_done");
+        qruncmd("mv $blastgz.tmp $blastgz");
     }
 }
 
@@ -461,7 +453,7 @@ sub hit_summary {
     
     open $BLS, "gunzip -c $blastgz |" or err("failed to open gunzip pipe from $blastgz");
     
-    open $TSV, ">", $blast_summary or err("failed to open $blast_summary for writing");
+    open $TSV, ">", "$blast_summary.tmp" or err("failed to open $blast_summary.tmp for writing");
     
     my %uniq;
     
@@ -478,6 +470,8 @@ sub hit_summary {
     undef %uniq;
     close $BLS;
     close $TSV;
+    
+    qruncmd("mv $blast_summary.tmp $blast_summary");
 }
 
 

@@ -26,9 +26,15 @@ sub err {
 }
 
 sub runcmd {
-    print_message("RUNNING: @_");
-    system("@_") == 0 or err("Failed to run @_\n");
-    print_message("FINISHED: @_")
+    my $job = shift;
+    print_message("RUNNING: $job->{command}");
+    if (system("$job->{command}") != 0){
+        print_message("ERROR: Failed to run $job->{command}");
+        print_message("Check $job->{logfile} for possible errors") if ($job->{logfile});
+        err("Exiting due to job failure");
+    } else {
+        print_message("FINISHED: $job->{command}");
+    }
 }
 
 sub qruncmd {
