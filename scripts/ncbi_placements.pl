@@ -76,7 +76,7 @@ mkdir $TMP if (!(-d $TMP));
 
 
 # get fasta indexes ready and get the haplotig IDs and lengths
-((-s "$_.fai") || runcmd("samtools faidx $_", "2>", "$TMP/samtools_faidx.stderr")) for ($haplotigs, $primary);
+((-s "$_.fai") || runcmd({ command => "samtools faidx $_ 2> $TMP/samtools_faidx.stderr", logfile => "$TMP/samtools_faidx.stderr" })) for ($haplotigs, $primary);
 
 # read in the contig lengths
 open my $HFI, "<", "$haplotigs.fai" or err("failed to open file $haplotigs.fai");
@@ -89,7 +89,7 @@ close $HFI;
 
 # run blastn to get the best hit for each haplotig
 if (!(-s "$TMP/$primary.outfmt6")){
-    runcmd("cat $haplotigs | parallel --no-notice -j $threads --block 100k --recstart '>' --pipe blastn -subject $primary -outfmt 6 -evalue 0.00000001 -max_target_seqs 1 -max_hsps 1000 -word_size 28 -culling_limit 10 -query - > $TMP/$primary.outfmt6");
+    runcmd({ command => "cat $haplotigs | parallel --no-notice -j $threads --block 100k --recstart '>' --pipe blastn -subject $primary -outfmt 6 -evalue 0.00000001 -max_target_seqs 1 -max_hsps 1000 -word_size 28 -culling_limit 10 -query - > $TMP/$primary.outfmt6.tmp 2> $TMP/blast.stderr  &&  mv  $TMP/$primary.outfmt6.tmp $TMP/$primary.outfmt6", logfile => "$TMP/blast.stderr" });
 } else {
     msg("found $TMP/$primary.outfmt6, SKIPPING blastn step");
 }
