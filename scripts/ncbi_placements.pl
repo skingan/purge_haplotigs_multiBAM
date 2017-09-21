@@ -19,12 +19,18 @@ use List::Util qw(min max);
     # get the alignment information from the coords file and write to the output placements file
 
 
+#---SET UP LOGGING---
+our $LOG;
+my $TMP = "temp_ncbi_placements";
+(-d $TMP) or mkdir $TMP;
+open $LOG, ">", "$TMP/purge_haplotigs_ncbiplace.log" or err("failed to open log file for writing");
+
+
+# Global variables
 my $primary;
 my $haplotigs;
 my $out = "ncbi_placements.tsv";
 my $threads = 4;
-my $TMP = "temp_ncbi_placements";
-
 
 my %output;     # $output{$htig}{len} = h-tig length
                 #               {top} = top hit
