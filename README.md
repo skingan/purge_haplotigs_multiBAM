@@ -37,11 +37,24 @@ Currently only tested on Ubuntu, there is a [Detailed installation](https://bitb
 
 - Install dependencies, make sure they're in the system PATH
 - Pull/clone this git
-- Add the purge_haplotigs bin to your system PATH
+
+Either:
+
+- Softlink `purge_haplotigs` to a directory in your system PATH
+
+Or:
+
+- Add the Purge Haplotigs bin directory to your system PATH
 
 ```
 #!bash
-# navigate to the purge_haploitgs bin directory
+# OPTION 1, SYMLINK 
+# to install in $HOME/bin
+ln -s /path/to/purge_haplotigs/bin/purge_haplotigs $HOME/bin/purge_haplotigs
+
+
+# OPTION 2, ADD TO THE SYSTEM PATH
+# navigate to the Purge Haploitgs bin directory
 cd /path/to/purge_haplotigs/bin
 
 # add it to the system PATH
