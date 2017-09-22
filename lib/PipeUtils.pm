@@ -27,13 +27,13 @@ sub err {
 
 sub runcmd {
     my $job = shift;
-    print_message("RUNNING: $job->{command}");
+    ($job->{silent}) || print_message("RUNNING: $job->{command}");
     if (system("$job->{command}") != 0){
         print_message("ERROR: Failed to run $job->{command}");
         print_message("Check $job->{logfile} for possible errors") if ($job->{logfile});
         err("Exiting due to job failure");
     } else {
-        print_message("FINISHED: $job->{command}");
+        ($job->{silent}) || print_message("FINISHED: $job->{command}");
     }
 }
 

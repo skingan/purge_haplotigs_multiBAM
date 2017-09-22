@@ -5,8 +5,8 @@ use warnings;
 use Getopt::Long;
 use threads;
 use Thread::Semaphore;
-use FindBin qw($Bin);
-use lib "$Bin/../lib";
+use FindBin qw($RealBin);
+use lib "$RealBin/../lib";
 use PipeUtils;
 
 
@@ -570,45 +570,32 @@ sub lastz_job {
     my $ref2 = $contigs{$contig}{2} if ($contigs{$contig}{2});
 
     # run lastz against ref1
-    $cmd = "lastz $lastz_parameters --format=general --rdotplot=$LASTZ_DIR/$job.1.rdotplot $MINCE_DIR/$contig.fasta $MINCE_DIR/$ref1.fasta > $LASTZ_DIR/$job.gen 2> $LASTZ_DIR/$job.lastz.stderr\n";
+    $cmd = "lastz $lastz_parameters --format=general --rdotplot=$LASTZ_DIR/$job.1.rdotplot $MINCE_DIR/$contig.fasta $MINCE_DIR/$ref1.fasta > $LASTZ_DIR/$job.coords 2> $LASTZ_DIR/$job.lastz.stderr\n";
     $tmp_log .= "RUNNING: $cmd";
-    $tmp_log .= `$cmd`;
-    if ($?){
-        $tmp_log .= "\nERROR: lastz finished with exit status $?\n";
-        $lastz_fail=1;
-    }
+    runcmd({ command => $cmd, logfile => "$LASTZ_DIR/$job.lastz.stderr", silent => 1 });
+    
     if (!(-s "$LASTZ_DIR/$job.1.rdotplot")){
         $ref1 = 0;
     }
 
     # run lastz against ref2
     if ($ref2){
-        $cmd = "lastz $lastz_parameters --format=general --rdotplot=$LASTZ_DIR/$job.2.rdotplot $MINCE_DIR/$contig.fasta $MINCE_DIR/$ref2.fasta >> $LASTZ_DIR/$job.gen 2> $LASTZ_DIR/$job.lastz.stderr\n";
+        $cmd = "lastz $lastz_parameters --format=general --rdotplot=$LASTZ_DIR/$job.2.rdotplot $MINCE_DIR/$contig.fasta $MINCE_DIR/$ref2.fasta >> $LASTZ_DIR/$job.coords 2>> $LASTZ_DIR/$job.lastz.stderr\n";
         $tmp_log .= "RUNNING: $cmd";
-        $tmp_log .= `$cmd`;
-        if ($?){
-            $tmp_log .= "\nERROR: lastz finished with exit status $?\n";
-            $lastz_fail=1;
-        }
+        runcmd({ command => $cmd, logfile => "$LASTZ_DIR/$job.lastz.stderr", silent => 1 });
         if (!(-s "$LASTZ_DIR/$job.2.rdotplot")){
             $ref2 = 0;
         }
     }
 
-    # capture lastz STDERR message, I wouldn't mind a more elegant way to do this
+    # capture lastz STDERR message
     $tmp_log .= `cat $LASTZ_DIR/$job.lastz.stderr`;
 
-    # exit if there's a lastz failure
-    if ($lastz_fail){
-        print_lastz_log(\$tmp_log);
-        err("lastz terminated abnormally, check $lastz_log for lastz STDERR msg\n");
-    }
-
     # sort the lastz alignments
-    qruncmd("grep -v -P \"^#\" $LASTZ_DIR/$job.gen | sort -k5,5n -k6,6n > $LASTZ_DIR/$job.s.gen");
+    qruncmd("grep -v -P \"^#\" $LASTZ_DIR/$job.coords | sort -k5,5n -k6,6n > $LASTZ_DIR/$job.s.coords");
 
     # get 'maxmatch' and 'bestmatch' coverages from the sorted general output of lastz
-    open my $BMC, "$LASTZ_DIR/$job.s.gen" or err("failed to open grep/sort pipe from $LASTZ_DIR/$job.s.gen for reading");
+    open my $BMC, "$LASTZ_DIR/$job.s.coords" or err("failed to open grep/sort pipe from $LASTZ_DIR/$job.s.coords for reading");
 
     my @p;
     my $bestmatch=0;
@@ -661,16 +648,16 @@ sub lastz_job {
     undef $cmd;
     if ($assignment ne "n"){
         if (($ref2) && ($ref1)){
-            $cmd = "$Bin/../scripts/dot_plot_plus.Rscript $UNASSIGNED/$contig.png $contig $contigs{$contig}{LEN} $MINCE_DIR/$contig.cov $ref1 $LASTZ_DIR/$job.1.rdotplot $ref2 $LASTZ_DIR/$job.2.rdotplot 2>&1 \n";
+            $cmd = "$RealBin/../scripts/dot_plot_plus.Rscript $UNASSIGNED/$contig.png $contig $contigs{$contig}{LEN} $MINCE_DIR/$contig.cov $ref1 $LASTZ_DIR/$job.1.rdotplot $ref2 $LASTZ_DIR/$job.2.rdotplot 1> $LASTZ_DIR/$job.Rscript.stderr 2>&1\n";
         } elsif (($ref1) && !($ref2)) {
-            $cmd = "$Bin/../scripts/dot_plot_plus.Rscript $UNASSIGNED/$contig.png $contig $contigs{$contig}{LEN} $MINCE_DIR/$contig.cov $ref1 $LASTZ_DIR/$job.1.rdotplot 2>&1 \n";
+            $cmd = "$RealBin/../scripts/dot_plot_plus.Rscript $UNASSIGNED/$contig.png $contig $contigs{$contig}{LEN} $MINCE_DIR/$contig.cov $ref1 $LASTZ_DIR/$job.1.rdotplot 1> $LASTZ_DIR/$job.Rscript.stderr 2>&1\n";
         } elsif (($ref2) && !($ref1)){
-            $cmd = "$Bin/../scripts/dot_plot_plus.Rscript $UNASSIGNED/$contig.png $contig $contigs{$contig}{LEN} $MINCE_DIR/$contig.cov $ref2 $LASTZ_DIR/$job.2.rdotplot 2>&1 \n";
+            $cmd = "$RealBin/../scripts/dot_plot_plus.Rscript $UNASSIGNED/$contig.png $contig $contigs{$contig}{LEN} $MINCE_DIR/$contig.cov $ref2 $LASTZ_DIR/$job.2.rdotplot 1> $LASTZ_DIR/$job.Rscript.stderr 2>&1\n";
         }
 
         if ($cmd){
             $tmp_log .= $cmd;
-            $tmp_log .= `$cmd`;
+            runcmd({ command => $cmd, logfile => "$LASTZ_DIR/$job.Rscript.stderr", silent => 1 });
         } else {
             err("Contig $contig returned alignment score but no rdotplot files");
         }
@@ -691,7 +678,7 @@ sub lastz_job {
     $writing_to_out->up(1);
 
     # clean up 
-    foreach my $file ("$LASTZ_DIR/$job.lastz.stderr", "$LASTZ_DIR/$job.gen", "$LASTZ_DIR/$job.s.gen", "$LASTZ_DIR/$job.1.rdotplot", "$LASTZ_DIR/$job.2.rdotplot"){
+    foreach my $file ("$LASTZ_DIR/$job.lastz.stderr", "$LASTZ_DIR/$job.coords", "$LASTZ_DIR/$job.s.coords", "$LASTZ_DIR/$job.1.rdotplot", "$LASTZ_DIR/$job.2.rdotplot", "$LASTZ_DIR/$job.Rscript.stderr"){
         if (-e $file){
             unlink $file or err("failed to clean up temp file $file");
         }

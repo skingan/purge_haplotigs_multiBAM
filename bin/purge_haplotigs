@@ -2,7 +2,7 @@
 
 use strict;
 use warnings;
-use FindBin qw($Bin);
+use FindBin qw($RealBin);
 
 my $usage = "
 USAGE:
@@ -23,22 +23,22 @@ my %scripts = (
 );
 
 sub read_hist {
-    system("perl $Bin/../scripts/readhist.pl @ARGV") == 0 or exit(1);
+    system("perl $RealBin/../scripts/readhist.pl @ARGV") == 0 or exit(1);
     exit(0);
 }
 
 sub contig_cov {
-    system("perl $Bin/../scripts/contigcov.pl @ARGV") == 0 or exit(1);
+    system("perl $RealBin/../scripts/contigcov.pl @ARGV") == 0 or exit(1);
     exit(0);
 }
 
 sub purge_haplotigs {
-    system("perl $Bin/../scripts/purge.pl @ARGV") == 0 or exit(1);
+    system("perl $RealBin/../scripts/purge.pl @ARGV") == 0 or exit(1);
     exit(0);
 }
 
 sub ncbi_placements {
-    system("perl $Bin/../scripts/ncbi_placements.pl @ARGV") == 0 or exit(1);
+    system("perl $RealBin/../scripts/ncbi_placements.pl @ARGV") == 0 or exit(1);
     exit(0);
 }
 

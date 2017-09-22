@@ -3,8 +3,8 @@
 use strict;
 use warnings;
 use Getopt::Long;
-use FindBin qw($Bin);
-use lib "$Bin/../lib";
+use FindBin qw($RealBin);
+use lib "$RealBin/../lib";
 use PipeUtils;
 use List::Util qw(min max);
 

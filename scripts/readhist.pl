@@ -2,8 +2,8 @@
 
 use strict;
 use warnings;
-use FindBin qw($Bin);
-use lib "$Bin/../lib";
+use FindBin qw($RealBin);
+use lib "$RealBin/../lib";
 use PipeUtils;
 
 
@@ -22,7 +22,7 @@ if (check_programs("bedtools", "Rscript", "samtools")){
 } else {
     err("ONE OR MORE DEPENDENCIES MISSING");
 }
-my $SCRIPT = "$Bin/../scripts/";
+my $SCRIPT = "$RealBin/../scripts/";
 
 
 
