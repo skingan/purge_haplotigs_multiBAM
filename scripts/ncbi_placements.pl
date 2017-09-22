@@ -46,8 +46,6 @@ my $usage = "
 USAGE:
 ncbi_placements.pl  -p primary_contigs.fasta  -h haplotigs.fasta  [ -o outfile  -t threads]
 
-NOTE: designed for nucmer 3.9 or higher
-
 REQUIRED:
 -p      primary contigs fasta file
 -h      haplotigs fasta file
@@ -55,6 +53,16 @@ REQUIRED:
 OPTIONAL:
 -o      out file name (DEFAULT = $out)
 -t      threads for blastn and nucmer steps (DEFAULT = $threads)
+
+IMPORTANT NOTES:  
+    Will only work with nucmer v3.9 or higher
+
+    The placement file generated is currently untested this script is still under development.
+    This script is intended to be an adaptation of nucmer2ncbiPlacement.py from:
+    https://github.com/skingan/NCBI_DiploidAssembly/blob/master/nucmer2ncbiPlacement.py
+    The adaptation is necessary if the assembly has been curated with Purge Haplotigs as the 
+    curated primary contigs and haplotigs wont necessarily be paired by the FALCON Unzip IDs.
+
 ";
 
 
