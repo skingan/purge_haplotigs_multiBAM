@@ -31,6 +31,7 @@ my $primary;
 my $haplotigs;
 my $out = "ncbi_placements.tsv";
 my $threads = 4;
+my $coverage = 50;
 
 my %output;     # $output{$htig}{len} = h-tig length
                 #               {top} = top hit
@@ -44,7 +45,7 @@ my %output;     # $output{$htig}{len} = h-tig length
 
 my $usage = "
 USAGE:
-ncbi_placements.pl  -p primary_contigs.fasta  -h haplotigs.fasta  [ -o outfile  -t threads]
+purge_haplotigs  ncbiplace  -p primary_contigs.fasta  -h haplotigs.fasta  [ -o outfile  -t threads  -c coverage]
 
 REQUIRED:
 -p      primary contigs fasta file
@@ -53,6 +54,7 @@ REQUIRED:
 OPTIONAL:
 -o      out file name (DEFAULT = $out)
 -t      threads for blastn and nucmer steps (DEFAULT = $threads)
+-c      coverage cutoff for pairing contigs (DEFAULT = $coverage %)
 
 IMPORTANT NOTES:  
     Will only work with nucmer v3.9 or higher
@@ -75,7 +77,8 @@ GetOptions (
     "primary=s" => \$primary,
     "haplotigs=s" => \$haplotigs,
     "out=s" => \$out,
-    "threads=i" => \$threads
+    "threads=i" => \$threads,
+    "coverage=i" => \$coverage
 ) or die $usage;
 
 
@@ -126,20 +129,22 @@ print $OUT "#alt_asm_name\tprim_asm_name\talt_scaf_name\tparent_type\tparent_nam
 
 # for each haplotig: run nucmer against top hit, delta-filter, and show-coords; parse the coords file to generate ncbi placement outputs
 foreach my $htig(sort(keys(%output))){
+    my $htig_out = $htig;
+    $htig_out =~ s/\|.+//;       # remove |quiver|arrow|etc tags
     my $h = $output{$htig};
     if ($$h{top}){
         msg("processing haplotig $htig -> $$h{top}");
         # run nucmer etc if needed
-        if (!(-s "$TMP/$htig.coords")){
+        if (!(-s "$TMP/$htig_out.coords")){
             qruncmd("samtools faidx $haplotigs \"$htig\" > $TMP/htig.fa");
             qruncmd("samtools faidx $primary \"$$h{top}\" > $TMP/ref.fa");
             qruncmd("nucmer -t $threads $TMP/htig.fa $TMP/ref.fa -p $TMP/tmp");
             qruncmd("delta-filter -g $TMP/tmp.delta > $TMP/tmp.g.delta");
-            qruncmd("show-coords -rT $TMP/tmp.g.delta > $TMP/$htig.coords");
+            qruncmd("show-coords -rT $TMP/tmp.g.delta > $TMP/$htig_out.coords");
         }
         
         # parse the coords file
-        open my $COR, "$TMP/$htig.coords" or err("failed to open $TMP/$htig.coords");
+        open my $COR, "$TMP/$htig_out.coords" or err("failed to open $TMP/$htig_out.coords");
         $$h{hs} = 999999999;
         $$h{rs} = 999999999;
         $$h{he} = 0;
@@ -157,13 +162,16 @@ foreach my $htig(sort(keys(%output))){
         close $COR;
     }
     
-    (($$h{hlen}) && ($$h{hlen} > (0.5 * $$h{len}))) ?                               # write the placement if > 50% alignment to the best hit primary contig
+    (($$h{hlen}) && ($$h{hlen} > (($coverage / 100) * $$h{len}))) ?                     # write the placement if > alignment cutoff to the best hit primary contig
         (print $OUT "Haplotigs\tPrimary_Assembly\t$htig\tSCAFFOLD\t$$h{top}\t",         # contig/assembly names
         ($$h{rlen} < 0 ? "-" : "+"),                                                    # check orientation (ncbi's 'mixed' tag not implemented)
         "\t$$h{hs}\t$$h{he}\t$$h{rs}\t$$h{re}\t",                                       # start/stop positions
         ($$h{hs} == 1 ? 0 : ($$h{hs}-1)), "\t",                                         # check start tail
         ($$h{he} == $$h{len} ? 0 : ($$h{len} - $$h{he})), "\n")                         # check end tail
     : print $OUT "Haplotigs\tPrimary_Assembly\t$htig", ("\tna" x 9), "\n";          # no placements if no or poor alignment
+    
+    # cleanup
+    (unlink $_) for ("$TMP/htig.fa", "$TMP/ref.fa", "$TMP/tmp.g.delta", "$TMP/tmp.delta");
 }
 
 
