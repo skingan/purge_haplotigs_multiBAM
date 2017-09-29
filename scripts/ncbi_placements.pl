@@ -88,7 +88,7 @@ GetOptions (
 
 
 # check args and files
-($primary) && ($haplotigs) || err("missing command line argument(s)\n$usage");
+($primary) && ($haplotigs) || die $usage;
 
 check_files($primary, $haplotigs);
 

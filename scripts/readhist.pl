@@ -31,7 +31,7 @@ USAGE:
 purge_haplotigs  readhist  aligned.bam
 
 REQUIRED:
-aligned.bam   Samtools-indexed bam file of aligned and sorted reads/subreads to the reference
+aligned.bam   BAM file of aligned and sorted reads/subreads to the reference
 
 ";
 
