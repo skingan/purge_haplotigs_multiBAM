@@ -92,6 +92,12 @@ GetOptions (
 
 check_files($primary, $haplotigs);
 
+# clean file names etc
+my $primary_fname = $primary;
+my $haplotigs_fname = $haplotigs;
+($_ =~ s/.*\///) for ($primary_fname, $haplotigs_fname);
+my $blast_outfmt6 = "$TMP/$primary_fname.$haplotigs_fname.outfmt6";
+my $blastn_parameters = "-evalue 0.00001 -max_target_seqs 1 -max_hsps 1000 -word_size 28 -culling_limit 10";
 
 
 #---THREADS---
@@ -135,14 +141,14 @@ close $HFI;
 
 
 #---BLASTN TO GET HITS FOR ALL HAPLOTIGS---
-if (!(-s "$TMP/$primary.outfmt6")){
-    runcmd({ command => "cat $haplotigs | parallel --no-notice -j $threads --block 100k --recstart '>' --pipe blastn -subject $primary -outfmt 6 -evalue 0.00000001 -max_target_seqs 1 -max_hsps 1000 -word_size 28 -culling_limit 10 -query - > $TMP/$primary.outfmt6.tmp 2> $TMP/blast.stderr  &&  mv  $TMP/$primary.outfmt6.tmp $TMP/$primary.outfmt6", logfile => "$TMP/blast.stderr" });
+if (!(-s $blast_outfmt6)){
+    runcmd({ command => "cat $haplotigs | parallel --no-notice -j $threads --block 100k --recstart '>' --pipe blastn -subject $primary -outfmt 6 $blastn_parameters -query - > $blast_outfmt6.tmp 2> $TMP/blast.stderr  &&  mv  $blast_outfmt6.tmp $blast_outfmt6", logfile => "$TMP/blast.stderr" });
 } else {
-    msg("found $TMP/$primary.outfmt6, SKIPPING blastn step");
+    msg("found $blast_outfmt6, SKIPPING blastn step");
 }
 
 # get an index of the hits
-open my $BLST, "<", "$TMP/$primary.outfmt6" or err("failed to open $TMP/$primary.outfmt6 for reading");
+open my $BLST, "<", $blast_outfmt6 or err("failed to open $blast_outfmt6 for reading");
 while(<$BLST>){
     my @l = split(/\s+/, $_);
     ($output{$l[0]}{top}) || ($output{$l[0]}{top} = $l[1]);

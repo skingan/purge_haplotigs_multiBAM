@@ -39,30 +39,40 @@ aligned.bam   BAM file of aligned and sorted reads/subreads to the reference
 
 # parse and check file
 my $bamfile = shift or die $usage;
+my $bamfilename = $bamfile;
+$bamfilename =~ s/.*\///;
 
 if (!(check_files("$bamfile"))){
     die $usage;
 }
 
+
+# FILENAMES FOR CLARITY
+my $gencov_file = "$bamfilename.genecov";
+my $csv_file = "$TMP_DIR/$bamfilename.histogram.csv";
+my $png_file = "$bamfilename.histogram.png";
+
+
+
 # run bedtools genomecov if needed
-if (!(-s "$TMP_DIR/$bamfile.genecov")){
-    runcmd({ command => "bedtools genomecov -ibam $bamfile -max 200 > $TMP_DIR/$bamfile.gencov.temp 2> $TMP_DIR/bedtools.genomecov.stderr  &&  mv $TMP_DIR/$bamfile.gencov.temp $bamfile.gencov", logfile => "$TMP_DIR/bedtools.genomecov.stderr" });
+if (!(-s $gencov_file)){
+    runcmd({ command => "bedtools genomecov -ibam $bamfile -max 200 > $TMP_DIR/$gencov_file.temp 2> $TMP_DIR/bedtools.genomecov.stderr  &&  mv $TMP_DIR/$gencov_file.temp $gencov_file", logfile => "$TMP_DIR/bedtools.genomecov.stderr" });
 } else {
-    msg("$TMP_DIR/$bamfile.genecov found, skipping bedtools genomecov step");
+    msg("$gencov_file found, skipping bedtools genomecov step");
 }
 
 # make the histogram csv
-if (!(-s "$TMP_DIR/$bamfile.histogram.csv")){
-    runcmd( { command => "grep genome $bamfile.gencov | awk '{ print \$2 \",\" \$3 }' > $TMP_DIR/$bamfile.histogram.csv" } );
+if (!(-s $csv_file)){
+    runcmd( { command => "grep genome $gencov_file | awk '{ print \$2 \",\" \$3 }' > $csv_file" } );
 } else {
-    msg("$bamfile.histogram.csv found, skipping step");
+    msg("$csv_file found, skipping step");
 }
 
 # make the histogram png
-if (!(-s "$bamfile.histogram.png")){
-    runcmd( { command => "$SCRIPT/gen_histogram.Rscript $TMP_DIR/$bamfile.histogram.csv $bamfile.histogram.png 2> $TMP_DIR/gen_histogram.stderr", logfile => "$TMP_DIR/gen_histogram.stderr" });
+if (!(-s $png_file)){
+    runcmd( { command => "$SCRIPT/gen_histogram.Rscript $csv_file $png_file 2> $TMP_DIR/gen_histogram.stderr", logfile => "$TMP_DIR/gen_histogram.stderr" });
 } else {
-    msg("$bamfile.histogram.png found, skipping Rscript step");
+    msg("$png_file found, skipping Rscript step");
 }
 
 # done

@@ -30,7 +30,8 @@ my $low_cutoff = 40;
 my $out_prefix = "curated";
 my $window_size = 9000;
 my $step_size = 3000;
-my $lastz_parameters = "--gfextend --chain --gapped --seed=match14 --allocate:traceback=160.0M";
+my $blastn_parameters = "-evalue 0.00001 -max_target_seqs 50 -max_hsps 1000 -word_size 24 -culling_limit 10";
+my $lastz_parameters = "--gfextend --chain --gapped --seed=match14 --allocate:traceback=200.0M";
 
 
 #---HELP MESSAGE---
@@ -84,7 +85,7 @@ GetOptions (
     "max_match=i" => \$maxmatch_cutoff, 
     "wind_len=i" => \$window_size,
     "wind_step=i" => \$step_size
-) or die($usage);
+) or die $usage;
 
 ($genome) && ($coverage_stats) && ($bam_file) or die $usage;
 
@@ -112,10 +113,15 @@ my $tmp_asm = "$TMP_DIR/assembly.fasta";
 my $suspects_fasta = "$TMP_DIR/suspects.fasta";
 my $blastdb = "$TMP_DIR/blastdb/assembly";
 my $blastgz = "$TMP_DIR/suspects.blastn.gz";
-my $blastn_done = "$TMP_DIR/blastn.done";
 my $blast_summary = "$TMP_DIR/blastn_summary.tsv";
 my $suspect_reassign = "$TMP_DIR/suspect_reassignments.tsv";
 my $lastz_log = "$TMP_DIR/lastz_analysis.stderr";
+
+# some clean file names
+my $bam_file_name = $bam_file;
+my $genome_file_name = $genome;
+$bam_file_name =~ s/.*\///;
+$genome_file_name =~ s/.*\///;
 
 # reassignment step
 my %suspects;   # suspects flagged from blastn search
@@ -200,6 +206,8 @@ Cutoff, suspect:        $low_cutoff %
 Out prefix:             $out_prefix
 Coverage window len:    $window_size bp
 Window step dist:       $step_size bp
+Blastn parameters:      $blastn_parameters
+Lastz paramters:        $lastz_parameters
 
 Running using command:
 purge_haplotigs purge $args\n
@@ -358,13 +366,13 @@ sub get_window_coverage {
         (-s "$bam_file.bai") or runcmd({ command => "samtools index $bam_file 2> $TMP_DIR/samtools.index.sdterr", logfile => "$TMP_DIR/samtools.index.sdterr" });
         
         # make the bed windows
-        runcmd({ command => "bedtools makewindows -g $genome.fai -w $window_size -s $step_size > $TMP_DIR/$genome.windows.bed.tmp 2> $TMP_DIR/bedtools.mkwind.stderr  &&  mv $TMP_DIR/$genome.windows.bed.tmp $TMP_DIR/$genome.windows.bed", logfile => "$TMP_DIR/bedtools.mkwind.stderr" });
+        runcmd({ command => "bedtools makewindows -g $genome.fai -w $window_size -s $step_size > $TMP_DIR/$genome_file_name.windows.bed.tmp 2> $TMP_DIR/bedtools.mkwind.stderr  &&  mv $TMP_DIR/$genome_file_name.windows.bed.tmp $TMP_DIR/$genome_file_name.windows.bed", logfile => "$TMP_DIR/bedtools.mkwind.stderr" });
         
         # get the reads per window
-        runcmd({ command => "bedtools multicov -bams $bam_file -bed $TMP_DIR/$genome.windows.bed > $TMP_DIR/$genome.mcov.tmp 2> $TMP_DIR/bedtools.mcov.stderr  &&  mv $TMP_DIR/$genome.mcov.tmp $TMP_DIR/$genome.mcov", logfile => "$TMP_DIR/bedtools.mcov.stderr" });
+        runcmd({ command => "bedtools multicov -bams $bam_file -bed $TMP_DIR/$genome_file_name.windows.bed > $TMP_DIR/$genome_file_name.mcov.tmp 2> $TMP_DIR/bedtools.mcov.stderr  &&  mv $TMP_DIR/$genome_file_name.mcov.tmp $TMP_DIR/$genome_file_name.mcov", logfile => "$TMP_DIR/bedtools.mcov.stderr" });
         
         # generate histogram table files for each contig, dump them in the minced directory
-        open $MCV, "$TMP_DIR/$genome.mcov" or err("Failed to open $TMP_DIR/$genome.mcov for reading");
+        open $MCV, "$TMP_DIR/$genome_file_name.mcov" or err("Failed to open $TMP_DIR/$genome_file_name.mcov for reading");
         
         my @wind_cov_out;
         my $cur_ctg;
@@ -408,7 +416,7 @@ sub get_window_coverage {
 
 sub run_blastn {
     if (-s $blastgz){
-        msg("skipping already completed blastn step. To rerun this step please delete $blastn_done and rerun this pipeline");
+        msg("skipping already completed blastn step. To rerun this step please delete $blastgz and rerun this pipeline");
     } else {
         
         msg("preparing blastdb");
@@ -434,9 +442,9 @@ sub run_blastn {
         msg("running blastn analysis");
         
         if ($gnuparallel){
-            runcmd({ command => "cat $suspects_fasta | parallel --no-notice -j $threads --block 100k --recstart '>' --pipe blastn -db $blastdb -outfmt 6 -evalue 0.000000000001 -max_target_seqs 20 -max_hsps 1000 -word_size 28 -culling_limit 10 -query - 2> $TMP_DIR/gnuparallel.stderr | awk ' \$1 != \$2 && \$4 > 500 { print } ' | gzip - > $blastgz.tmp", logfile => "$TMP_DIR/gnuparallel.stderr" });
+            runcmd({ command => "cat $suspects_fasta | parallel --no-notice -j $threads --block 50k --recstart '>' --pipe blastn -db $blastdb -outfmt 6 $blastn_parameters -query - 2> $TMP_DIR/gnuparallel.stderr | awk ' \$1 != \$2 && \$4 > 500 { print } ' | gzip - > $blastgz.tmp", logfile => "$TMP_DIR/gnuparallel.stderr" });
         } else {
-            runcmd({ command => "blastn -query $suspects_fasta -db $blastdb -outfmt 6 -evalue 0.000000000001 -num_threads $threads -max_target_seqs 3 -max_hsps 1000 -word_size 28 -culling_limit 10 2> $TMP_DIR/blastn.stderr |  awk ' \$1 != \$2 && \$4 > 500 { print } ' | gzip - > $blastgz.tmp.gz", logfile => "$TMP_DIR/blastn.stderr" });
+            runcmd({ command => "blastn -query $suspects_fasta -db $blastdb -outfmt 6 -num_threads $threads $blastn_parameters 2> $TMP_DIR/blastn.stderr |  awk ' \$1 != \$2 && \$4 > 500 { print } ' | gzip - > $blastgz.tmp.gz", logfile => "$TMP_DIR/blastn.stderr" });
         }
         qruncmd("mv $blastgz.tmp $blastgz");
     }
