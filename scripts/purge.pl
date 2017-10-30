@@ -337,7 +337,7 @@ sub mince_genome {
                 print $OUT $l;
             } else {
                 my $id;
-                if ($l =~ /^>([a-zA-Z0-9_-]+)[\s\|]/){ # cut off |quiver|arrow|etc
+                if ($l =~ /^>([a-zA-Z0-9_\.-]+)[\s\|]/){ # cut off |quiver|arrow|etc
                     $id = $1;
                     close $OUT if ($OUT);
                     open $OUT, ">", "$MINCE_DIR/$id.fasta" or err("failed to open \"$MINCE_DIR/$id.fasta\" for writing");
@@ -548,6 +548,8 @@ sub run_lastz_analysis {
         # skip if no hits
         if (!($contigs{$contig}{1})){
             $contigs{$contig}{ASSIGN} = "n";
+            $contigs{$contig}{BM} = "-";
+            $contigs{$contig}{MM} = "-";
             if (-s "$UNASSIGNED/$contig.png"){
                 unlink "$UNASSIGNED/$contig.png";
             }
@@ -903,9 +905,9 @@ sub write_assembly {
         if ( !($junk{$ctg}) && !($contigs{$ctg}{REASSIGNED}) ){
             my $c1 = $contigs{$ctg}{1} || "-";
             my $c2 = $contigs{$ctg}{2} || "-";
-            my $b = $contigs{$ctg}{BM} || "-";
-            my $m = $contigs{$ctg}{MM} || "-";
-            print $CUT "$ctg\t$c1\t$c2\t$b\t$m\tKEEP\n";
+            my $bm = $contigs{$ctg}{BM} || "-";
+            my $mm = $contigs{$ctg}{MM} || "-";
+            print $CUT "$ctg\t$c1\t$c2\t$bm\t$mm\tKEEP\n";
             qruncmd("cat $MINCE_DIR/$ctg.fasta >> $out_fasta");
         }
     }

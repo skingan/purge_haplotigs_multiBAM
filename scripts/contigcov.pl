@@ -58,10 +58,8 @@ GetOptions(
     "low=i" => \$lowc,
     "high=i" => \$highc,
     "mid=i" => \$midc,
-    "auto=i" => \$junk,
     "suspect=i" => \$suspect,
-    "junk=i" => \$junk,
-    "suspect=i" => \$suspect
+    "junk=i" => \$junk
 ) or die $usage;
 
 ($incov) && ($outcsv) && ($lowc) && ($highc) && ($midc) or die $usage;
@@ -79,8 +77,6 @@ while(<$IN>){
     ($cont, $cov, $bases, $all, $frac) = split(/\s+/, $_);
     # remove vert bar stuff like |quiver and |arrow if present
     $cont =~ s/\|.+//;
-    # skip contigs with nothing
-    next if ($cov == 0 && $frac == 1);
     # ignore genome histogram
     next if ($cont eq "genome");
     # initial iteration check
