@@ -6,12 +6,16 @@ use FindBin qw($RealBin);
 
 my $usage = "
 USAGE:
-purge_haplotigs  readhist,contigcov,purge,ncbiplace  [script-specific options]
+purge_haplotigs  <command>  [options]
 
-readhist        First step: generate a read-depth histogram for the genome
-contigcov       Second step: get contig-by-contig stats and flag 'suspect' contigs
-purge           Third step: run the purge_haplotigs pipeline
-ncbiplace       A script to generate a placement file for submission to NCBI
+COMMANDS:
+-- Purge Haplotigs pipeline:
+    readhist        First step, generate a read-depth histogram for the genome
+    contigcov       Second step, get contig coverage stats and flag 'suspect' contigs
+    purge           Third step, identify and reassign haplotigs
+
+-- Other scripts
+    ncbiplace       Generate a placement file for submission to NCBI
 
 ";
 

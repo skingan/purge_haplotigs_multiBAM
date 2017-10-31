@@ -6,29 +6,29 @@ use Getopt::Long;
 # pipe script for analysing bedtools genomeCov output
 
 my $incov;
-my $outcsv;
 my $lowc;
 my $midc;
 my $highc;
+my $outcsv = "coverage_stats.csv";
 my $junk = 80;
 my $suspect = 80;
 
 my $usage = "
 USAGE:
-purge_haplotigs  contigcov  -i aligned.bam.genecov  -o coverage_stats.csv  -l 30  -m 80  -h 145  [ -j $junk  -s $suspect ]
+purge_haplotigs  contigcov  -i aligned.bam.genecov  -l 30  -m 80  -h 145  [-o coverage_stats.csv -j $junk  -s $suspect ]
 
 REQUIRED:
--i      The bedtools genomecov output that was produced from 'purge_haplotigs readhist'
--o      Choose an output file name (csv format)
--l      The read depth low cutoff (use the histogram to eyeball these cutoffs)
--h      The read depth high cutoff
--m      The low point between the haploid and diploid peaks
+-i / -in        The bedtools genomecov output that was produced from 'purge_haplotigs readhist'
+-l / -low       The read depth low cutoff (use the histogram to eyeball these cutoffs)
+-h / -high      The read depth high cutoff
+-m / -mid       The low point between the haploid and diploid peaks
 
 OPTIONAL:
--j      Auto-assign contig as \"j\" (junk) if this percentage or greater of the contig is 
-        low/high coverage (default = $junk, > 100 = don't junk anything)
--s      Auto-assign contig as \"s\" (suspected haplotig) if this percentage or less of the
-        contig is diploid level of coverage (default = $suspect)
+-o / -out       Choose an output file name (CSV format, DEFAULT = $outcsv)
+-j / -junk      Auto-assign contig as \"j\" (junk) if this percentage or greater of the contig is 
+                low/high coverage (default = $junk, > 100 = don't junk anything)
+-s / -suspect   Auto-assign contig as \"s\" (suspected haplotig) if this percentage or less of the
+                contig is diploid level of coverage (default = $suspect)
 
 ";
 
@@ -58,15 +58,11 @@ GetOptions(
     "low=i" => \$lowc,
     "high=i" => \$highc,
     "mid=i" => \$midc,
-    "auto=i" => \$junk,
     "suspect=i" => \$suspect,
-    "junk=i" => \$junk,
-    "suspect=i" => \$suspect
+    "junk=i" => \$junk
 ) or die $usage;
 
-if ( !($incov) || !($outcsv) || !($lowc) || !($highc) || !($midc) ){
-    die $usage;
-}
+($incov) && ($outcsv) && ($lowc) && ($highc) && ($midc) or die $usage;
 
 my $IN;
 my $OUT;
@@ -81,8 +77,6 @@ while(<$IN>){
     ($cont, $cov, $bases, $all, $frac) = split(/\s+/, $_);
     # remove vert bar stuff like |quiver and |arrow if present
     $cont =~ s/\|.+//;
-    # skip contigs with nothing
-    next if ($cov == 0 && $frac == 1);
     # ignore genome histogram
     next if ($cont eq "genome");
     # initial iteration check
