@@ -49,32 +49,45 @@ Or:
 ```
 #!bash
 # OPTION 1, SYMLINK 
-# to install in $HOME/bin
-ln -s /path/to/purge_haplotigs/bin/purge_haplotigs $HOME/bin/purge_haplotigs
+    # to install in $HOME/bin
+% ln -s /path/to/purge_haplotigs/bin/purge_haplotigs $HOME/bin/purge_haplotigs
 
 
 # OPTION 2, ADD TO THE SYSTEM PATH
-# navigate to the Purge Haploitgs bin directory
-cd /path/to/purge_haplotigs/bin
+    # navigate to the Purge Haploitgs bin directory
+% cd /path/to/purge_haplotigs/bin
 
-# add it to the system PATH
-export PATH=$PATH:$PWD
+    # add it to the system PATH
+% export PATH=$PATH:$PWD
 
-# optionally add a line to your .bashrc
-printf "\nexport PATH=\$PATH:$PWD\n" >> $HOME/.bashrc
+    # optionally add a line to your .bashrc
+% printf "\nexport PATH=\$PATH:$PWD\n" >> $HOME/.bashrc
 ```
 
 - That's it! check that it's running ok
 ```
 #!bash
-$ purge_haplotigs
+# Check the usage message
+% purge_haplotigs 
 
 USAGE:
-purge_haplotigs  readhist,contigcov,purge  [script-specific options]
+purge_haplotigs  <command>  [options]
 
-readhist        First step: generate a read-depth histogram for the genome
-contigcov       Second step: get contig-by-contig stats and flag suspect contigs
-purge           Third step: run the purge_haplotigs pipeline
+COMMANDS:
+-- Purge Haplotigs pipeline:
+    readhist        First step, generate a read-depth histogram for the genome
+    contigcov       Second step, get contig coverage stats and flag 'suspect' contigs
+    purge           Third step, identify and reassign haplotigs
+
+-- Other scripts
+    ncbiplace       Generate a placement file for submission to NCBI
+
+# Run the test
+cd /path/to/purge_haplotigs/test
+make test
+    # It should finish with no errors
+make clean
+    # To clean up
 ```
 
 ## Running Purge Haplotigs
@@ -91,10 +104,12 @@ Generate a coverage histogram by running the first script. This script will prod
 
 ```
 #!text
-purge_haplotigs  readhist  <bam>
+# USAGE:
+% purge_haplotigs  readhist  aligned.bam
 
 REQUIRED:
-<bam>   Sorted bam file of reads aligned to your genome assembly
+aligned.bam   BAM file of aligned and sorted reads/subreads to the reference
+
 
 ```
 
@@ -112,21 +127,21 @@ Run the second script using the cutoffs from the previous step to analyse the co
 
 ```
 #!text
-purge_haplotigs  contigcov  -i aligned.bam.genecov  -o coverage_stats.csv  -l 30  -m 80  -h 145  [ -j 80  -s 80 ]
+# USAGE:
+% purge_haplotigs  contigcov  -i aligned.bam.genecov  -l 30  -m 80  -h 145  [-o coverage_stats.csv -j 80  -s 80 ]
 
 REQUIRED:
--i      The bedtools genomecov output that was produced from 'purge_haplotigs readhist'
--o      Choose an output file name (csv format)
--l      The read depth low cutoff (use the histogram to eyeball these cutoffs)
--h      The read depth high cutoff
--m      The low point between the haploid and diploid peaks
+-i / -in        The bedtools genomecov output that was produced from 'purge_haplotigs readhist'
+-l / -low       The read depth low cutoff (use the histogram to eyeball these cutoffs)
+-h / -high      The read depth high cutoff
+-m / -mid       The low point between the haploid and diploid peaks
 
 OPTIONAL:
--j      Auto-assign contig as "j" (junk) if this percentage or greater of the contig is
-        low/high coverage (default = 80, > 100 = don't junk anything)
--s      Auto-assign contig as "s" (suspected haplotig) if this percentage or less of the
-        contig is diploid level of coverage (default = 80)
-
+-o / -out       Choose an output file name (CSV format, DEFAULT = coverage_stats.csv)
+-j / -junk      Auto-assign contig as "j" (junk) if this percentage or greater of the contig is 
+                low/high coverage (default = 80, > 100 = don't junk anything)
+-s / -suspect   Auto-assign contig as "s" (suspected haplotig) if this percentage or less of the
+                contig is diploid level of coverage (default = 80)
 ```
 
 #### STEP 3
@@ -135,13 +150,14 @@ Run the purging pipeline. This script will automatically run a BEDTools windowed
 
 ```
 #!text
-purge_haplotigs  purge  -g genome.fasta  -c coverage_stats.csv -b aligned.sorted.bam
+# USAGE:
+% purge_haplotigs  purge  -g genome.fasta  -c coverage_stats.csv  -b aligned.bam
 
 REQUIRED:
 -g / -genome        Genome assembly in fasta format. Needs to be indexed with samtools faidx.
 -c / -coverage      Contig by contig coverage stats csv file from the previous step.
--b / -bam           Samtools-indexed bam file of aligned reads/subreads to the reference (same
-                    one used for generating the read-depth histogram).
+-b / -bam           Samtools-indexed bam file of aligned and sorted reads/subreads to the reference 
+                    (same one used for generating the read-depth histogram).
 
 OPTIONAL:
 -t / -threads       Number of worker threads to use. DEFAULT = 4.
@@ -150,7 +166,6 @@ OPTIONAL:
 -m / -max_match     Percent cutoff for identifying repetitive contigs. DEFAULT = 250.
 -wind_len           Length of genome window (in bp) for the coverage track in the dotplots. DEFAULT = 9000.
 -wind_step          Step distance for genome windows for coverage track. DEFAULT = 3000.
-
 ```
 
 #### All done! 
