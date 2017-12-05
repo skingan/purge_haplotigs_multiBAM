@@ -1,3 +1,7 @@
+THIS IS A BRANCH OF [PURGE HAPLOTIGS](https://bitbucket.org/mroachawri/purge_haplotigs/overview)
+https://bitbucket.org/mroachawri/purge_haplotigs/overview
+
+
 # Purge Haplotigs
 
 Pipeline to help with curating heterozygous diploid genome assemblies (for instance when assembling using FALCON or FALCON-unzip). 
