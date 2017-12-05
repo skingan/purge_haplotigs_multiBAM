@@ -1,4 +1,5 @@
-THIS IS A BRANCH OF [PURGE HAPLOTIGS](https://bitbucket.org/mroachawri/purge_haplotigs/overview)
+THIS IS A BRANCH OF [PURGE HAPLOTIGS](https://bitbucket.org/mroachawri/purge_haplotigs/overview) that can accomodate multiple BAM files rather than requiring a single BAM. Currently it uses single BAM files for each contig of an assembly.
+
 https://bitbucket.org/mroachawri/purge_haplotigs/overview
 
 
